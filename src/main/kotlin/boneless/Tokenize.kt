@@ -1,5 +1,56 @@
 package boneless
 
+val numbers = "0123456789"
+
+fun Char.canStartIdentifier() = isLetter() || this == '_'
+fun Char.canMakeUpIdentifier() = canStartIdentifier() || this in numbers
+
+enum class Keyword(val symbol: String) {
+    /** This is never parsed */
+    None(""),
+
+    LParent("("),
+    RParent(")"),
+    LCurlyBrace("{"),
+    RCurlyBrace("}"),
+    LSquareBrace("["),
+    RSquareBrace("]"),
+
+    Def("def"),
+    Let("let"),
+    Var("var"),
+
+    If("if"),
+    Then("then"),
+    Else("else"),
+
+    DefinitionSeparator("::"),
+    Map("=>"),
+    Eq("=="),
+    NotEq("!="),
+    InfEq("<="),
+    GreaterEq(">="),
+
+    Assign("="),
+    Inf("<"),
+    Greater(">"),
+    StatementEnd(";"),
+    NextItem(","),
+    TypeAnnotation(":"),
+
+    Plus("+"),
+    Minus("-"),
+    Multiply("*"),
+    Divide("/"),
+    Modulo("%"),
+
+    Not("!"),
+    And("^"),
+    Or("|"),
+
+    Reference("&"),
+    Dereference("@"),
+}
 
 class Tokenizer(val input: String) {
     data class Token(val pos: Pos, val tokenName: String, val payload: String? = null)
@@ -54,54 +105,9 @@ class Tokenizer(val input: String) {
     val here: String
         get() = "$pos, starting with \"${input.substring(i, Math.min(input.length, i + 10))}...\""
 
-    val numbers = "0123456789"
-
-    fun Char.canStartIdentifier() = isLetter() || this == '_'
-    fun Char.canMakeUpIdentifier() = canStartIdentifier() || this in numbers
-
-    enum class Keyword(val symbol: String) {
-        /** This is never parsed */
-        Inacessible(""),
-
-        LParent("("),
-        RParent(")"),
-        LCurlyBrace("{"),
-        RCurlyBrace("}"),
-        LSquareBrace("["),
-        RSquareBrace("]"),
-
-        Def("def"),
-        Let("let"),
-        Var("var"),
-
-        If("if"),
-        Then("then"),
-        Else("else"),
-
-        DefinitionSeparator("::"),
-        Map("=>"),
-        Eq("=="),
-        NotEq("!="),
-        InfEq("<="),
-        GreaterEq(">="),
-
-        Assign("="),
-        Inf("<"),
-        Greater(">"),
-        StatementEnd(";"),
-        NextItem(","),
-        TypeAnnotation(":"),
-
-        Plus("+"),
-        Minus("-"),
-        Multiply("*"),
-        Divide("/"),
-        Modulo("%"),
-    }
-
     fun acceptKeyword(): Boolean {
         for (keyword in Keyword.values()) {
-            if (keyword != Keyword.Inacessible && acceptToken(keyword.symbol))
+            if (keyword != Keyword.None && acceptToken(keyword.symbol))
                 return true
         }
         return false

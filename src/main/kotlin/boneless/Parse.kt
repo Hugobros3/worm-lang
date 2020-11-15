@@ -1,52 +1,62 @@
 package boneless
 
-import boneless.Tokenizer.Token
+enum class UnaryOperators(val token: Keyword, val rewrite: String) {
+    Minus(Keyword.Minus, "minus"),
 
-// Priority * 80
-// Priority + 40
-enum class UnaryOperators(val token: Tokenizer.Keyword, val rewrite: String) {
-    Minus(Tokenizer.Keyword.Minus, "minus"),
+    Not(Keyword.Not, "not"),
+    Reference(Keyword.Reference, "ref"),
+    Dereference(Keyword.Dereference, "deref"),
 }
 
-enum class BinaryOperators(val token: Tokenizer.Keyword, val priority: Int, val rewrite: String) {
-    Plus(Tokenizer.Keyword.Plus, 40, "plus"),
-    Minus(Tokenizer.Keyword.Minus, 40, "minus"),
-    Multiply(Tokenizer.Keyword.Multiply, 80, "multiply"),
-    Divide(Tokenizer.Keyword.Divide, 80, "divide"),
-    Modulo(Tokenizer.Keyword.Modulo, 80, "modulo"),
+enum class BinaryOperators(val token: Keyword, val priority: Int, val rewrite: String?) {
+    Map(Keyword.Map, 0, null),
+    Ascription(Keyword.TypeAnnotation, 80, null),
+    Application(Keyword.None, 100, null),
 
-    InfEq(Tokenizer.Keyword.InfEq, 20, "infeq"),
-    Inf(Tokenizer.Keyword.Inf, 20, "inf"),
-    Eq(Tokenizer.Keyword.Eq, 20, "eq"),
+    Plus(Keyword.Plus, 40, "plus"),
+    Minus(Keyword.Minus, 40, "minus"),
+    Multiply(Keyword.Multiply, 80, "multiply"),
+    Divide(Keyword.Divide, 80, "divide"),
+    Modulo(Keyword.Modulo, 80, "modulo"),
+
+    InfEq(Keyword.InfEq, 20, "infeq"),
+    Inf(Keyword.Inf, 20, "inf"),
+    Eq(Keyword.Eq, 20, "eq"),
+
+    And(Keyword.And, 80, "and"),
+    Or(Keyword.Or, 40, "or"),
 }
 
-class Parser(val inputAsText: String, val tokens: List<Token>) {
-    var i = 0
+class Parser(private val inputAsText: String, private val tokens: List<Tokenizer.Token>) {
+    private var i = 0
 
-    fun unexpectedToken(expected: String? = null): Nothing {
+    private fun unexpectedToken(expected: String? = null): Nothing {
         throw Exception("Unexpected token '${front.tokenName}' at $here" + (expected?.let { ", expected $it" } ?: ""))
     }
 
-    fun expected(expected: String): Nothing {
-        throw Exception("Expected token '${expected}' at $here but got $front")
+    private fun expectedToken(expected: String): Nothing {
+        throw Exception("Expected token '$expected' at $here but got $front")
     }
 
-    val pos: Tokenizer.Pos
+    private fun expected(expected: String): Nothing {
+        throw Exception("Expected $expected at $here but got $front")
+    }
+
+    private val pos: Tokenizer.Pos
         get() = front.pos
 
-    val here: String
+    private val here: String
         get() = "${front.pos}, starting with \"${
             inputAsText.substring(
                 front.pos.absolute,
                 Math.min(inputAsText.length, front.pos.absolute + 10)
             )
         }...\""
-    //get() = "${front.pos}, starting with \"${inputAsText.substring(front.pos.absolute, Math.min(inputAsText.length, front.pos.absolute + 10))}...\""
 
-    val front: Token
+    private val front: Tokenizer.Token
         get() = tokens[i]
 
-    fun accept(tokenName: String): Boolean {
+    private fun accept(tokenName: String): Boolean {
         if (i >= tokens.size) return false
         if (tokens[i].tokenName == tokenName) {
             i++
@@ -55,19 +65,19 @@ class Parser(val inputAsText: String, val tokens: List<Token>) {
         return false
     }
 
-    fun eatIdentifier(): String {
+    private fun eatIdentifier(): String {
         val id = eat("Identifier")
         return id.payload!!
     }
 
-    fun eat(tokenName: String): Token {
+    private fun eat(tokenName: String): Tokenizer.Token {
         if (!accept(tokenName)) {
             throw Exception("expected '$tokenName' at $here but got '${front.tokenName}'")
         }
         return tokens[i - 1]
     }
 
-    fun eat(): Token {
+    private fun eat(): Tokenizer.Token {
         i++
         return tokens[i - 1]
     }
@@ -75,11 +85,11 @@ class Parser(val inputAsText: String, val tokens: List<Token>) {
     fun parseProgram(): Expression.Sequence {
         val p = parseInstructionSequence()
         if (front.tokenName != "EOF")
-            expected("EOF")
+            expectedToken("EOF")
         return p
     }
 
-    fun parseInstructionSequence(): Expression.Sequence {
+    private fun parseInstructionSequence(): Expression.Sequence {
         val instructions = mutableListOf<Instruction>()
         while (true) {
             instructions += parseInstruction() ?: break
@@ -88,11 +98,11 @@ class Parser(val inputAsText: String, val tokens: List<Token>) {
         return Expression.Sequence(instructions, yieldValue)
     }
 
-    fun parseInstruction(): Instruction? {
+    private fun parseInstruction(): Instruction? {
         when {
             accept("def") -> {
                 val identifier = eatIdentifier()
-                val type = parseTypeAnnotation()
+                val type = acceptTypeAnnotation()
                 eat("::")
                 val body = parseExpression(0) ?: unexpectedToken("expression")
                 eat(";")
@@ -100,7 +110,7 @@ class Parser(val inputAsText: String, val tokens: List<Token>) {
             }
             accept("let") -> {
                 val identifier = eatIdentifier()
-                val type = parseTypeAnnotation()
+                val type = acceptTypeAnnotation()
                 eat("=")
                 val rhs = parseExpression(0) ?: unexpectedToken("expression")
                 eat(";")
@@ -108,7 +118,7 @@ class Parser(val inputAsText: String, val tokens: List<Token>) {
             }
             accept("var") -> {
                 val identifier = eatIdentifier()
-                val type = parseTypeAnnotation()
+                val type = acceptTypeAnnotation()
                 val defaultValue = if (accept("=")) parseExpression(0) else null
                 eat(";")
                 return Instruction.Var(identifier, type, defaultValue)
@@ -117,30 +127,29 @@ class Parser(val inputAsText: String, val tokens: List<Token>) {
         return null
     }
 
-    fun parseTypeAnnotation(): Expression? {
+    private fun acceptTypeAnnotation(): Expression? {
         if (accept(":")) {
             return parseExpression(0)
         }
         return null
     }
 
-    fun parseExpressionHead(): Expression? {
-        val ret = when {
+    private fun parsePrimaryExpression(): Expression? {
+        when {
             front.tokenName == "StringLit" -> {
                 val nom = eat(); return Expression.StringLit(nom.payload!!); }
             front.tokenName == "NumLit" -> {
                 val nom = eat(); return Expression.NumLit(nom.payload!!); }
             front.tokenName == "Identifier" -> {
                 val id = eatIdentifier()
-                Expression.RefSymbol(id)
+                return Expression.RefSymbol(id)
             }
             accept("-") -> {
                 // Minus is bullshit
                 if (front.tokenName == "NumLit") {
                     val nom = eat()
                     return Expression.NumLit("-" + nom.payload!!)
-                }
-                else throw Exception("This is explicitly disallowed, '-' is not a valid identifier.")
+                } else throw Exception("This is explicitly disallowed, '-' is not a valid identifier.")
             }
             accept("if") -> {
                 val condition = parseExpression(0)!!
@@ -152,7 +161,7 @@ class Parser(val inputAsText: String, val tokens: List<Token>) {
             }
             accept("(") -> {
                 val inside = parseExpression(0)
-                if (inside == null) {
+                return if (inside == null) {
                     eat(")")
                     return Expression.Unit
                 } else {
@@ -175,64 +184,76 @@ class Parser(val inputAsText: String, val tokens: List<Token>) {
             accept("{") -> {
                 val seq = parseInstructionSequence()
                 eat("}")
-                seq
+                return seq
             }
             else -> return null
         }
-        return ret
     }
 
-    fun parseUnaryOp(): Expression? {
+    private fun parseUnaryOp(): Expression? {
         for (unop in UnaryOperators.values()) {
-            if (unop.token == Tokenizer.Keyword.Minus && i + 1 < tokens.size && tokens[i+1].tokenName == "NumLit")
+            if (unop.token == Keyword.Minus && i + 1 < tokens.size && tokens[i + 1].tokenName == "NumLit")
                 continue
             if (accept(unop.token.symbol)) {
-                return Expression.Invocation(Expression.RefSymbol(unop.rewrite), listOf(parseUnaryOp()!!))
+                return Expression.Invocation(listOf(Expression.RefSymbol(unop.rewrite), parseUnaryOp()!!))
             }
         }
-        return parseExpressionHead()
+        return parsePrimaryExpression()
     }
 
-    // fn_a arg0 arg1
-    fun parseExpression(priority: Int): Expression? {
+    private fun Expression.canBePattern() = when(this) {
+        Expression.Unit -> true
+        is Expression.StringLit -> true
+        is Expression.NumLit -> true
+        is Expression.RefSymbol -> true
+        is Expression.Tuple -> true
+        is Expression.Invocation -> true
+        is Expression.Function -> false
+        is Expression.Ascription -> true
+        is Expression.Sequence -> false
+        is Expression.Conditional -> false
+    }
+
+    private fun parseExpression(priority: Int): Expression? {
         var first = parseUnaryOp() ?: return null
 
         outerBinop@
         while (true) {
             for (binop in BinaryOperators.values()) {
-                if ((binop.priority >= priority) && accept(binop.token.symbol)) {
-                    val rhs = parseExpression(binop.priority)!!
-                    first = Expression.Invocation(Expression.RefSymbol(binop.rewrite), listOf(first, rhs))
-                    continue@outerBinop
+                if ((binop.priority >= priority)) {
+                    if (binop == BinaryOperators.Application && binop.priority > priority) {
+                        val following = parseExpression(binop.priority) ?: continue
+                        first = when (val oldfirst = first) {
+                            is Expression.Invocation -> Expression.Invocation(oldfirst.arguments + listOf(following))
+                            else -> Expression.Invocation(listOf(first, following))
+                        }
+                        continue@outerBinop
+                    }
+                    else if (accept(binop.token.symbol)) {
+                        val rhs = parseExpression(binop.priority)!!
+                        when (binop) {
+                            BinaryOperators.Ascription -> {
+                                first = Expression.Ascription(first, rhs)
+                            }
+                            BinaryOperators.Map -> {
+                                val oldfirst = first
+                                first = when {
+                                    oldfirst is Expression.Invocation -> Expression.Function(oldfirst.arguments, rhs)
+                                    oldfirst.canBePattern() -> Expression.Function(listOf(oldfirst), rhs)
+                                    else -> expected("Expected operands before =>")
+                                }
+                            }
+                            else -> {
+                                first = Expression.Invocation(listOf(Expression.RefSymbol(binop.rewrite!!), first, rhs))
+                            }
+                        }
+                        continue@outerBinop
+                    }
                 }
             }
             break
         }
 
-        val following = mutableListOf<Expression>()
-        // You either have an invocation with parameters such as
-        // foo a b c
-        // Or a parameter-less invoke with a type annotation
-        // foo: I32 -> I32 -> I32 -> I32
-        // if you want both you do
-        // (foo: I32 -> I32 -> I32 -> I32) a b c
-        val typeAnnotation = if (priority == 0) parseTypeAnnotation() else null
-        if (typeAnnotation == null) {
-            while (true) {
-                val arg = parseExpressionHead() ?: break
-                following += arg
-            }
-        } else {
-            first = Expression.Ascription(first, typeAnnotation)
-        }
-
-        if (accept("=>")) {
-            val body = parseExpression(0)!!
-            return Expression.Function(listOf(first) + following, body)
-        }
-
-        if (following.isEmpty())
-            return first
-        return Expression.Invocation(first, following)
+        return first
     }
 }

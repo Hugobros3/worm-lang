@@ -16,7 +16,7 @@ sealed class Expression {
     data class RefSymbol(val symbol: String) : Expression()
 
     data class Tuple(val elements: List<Expression>) : Expression()
-    data class Invocation(val callee: Expression, val arguments: List<Expression>) : Expression()
+    data class Invocation(val arguments: List<Expression>) : Expression()
     data class Function(val parameters: List<Expression>, val body: Expression) : Expression()
 
     data class Ascription(val e: Expression, val type: Expression) : Expression()

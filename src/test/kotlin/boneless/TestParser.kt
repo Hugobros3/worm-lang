@@ -78,5 +78,17 @@ class TestParser {
             let x = sum 2 (2 * reverse);
             let y = 3 * 3 francis;
         """.trimIndent())
+
+        test("""
+            def operations :: a b c d => {
+                let x = a ^ b;
+                let y = !x | c;
+                let z = !!(x ^ c ^ d ^ y);
+            };
+        """.trimIndent())
+
+        test("""
+            def analyze :: s: &(I32, I32) => @S;
+        """.trimIndent())
     }
 }
