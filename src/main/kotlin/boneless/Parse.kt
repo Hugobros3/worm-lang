@@ -5,7 +5,7 @@ import boneless.Tokenizer.Token
 // Priority * 80
 // Priority + 40
 enum class UnaryOperators(val token: Tokenizer.Keyword, val rewrite: String) {
-    Minus(Tokenizer.Keyword.Inacessible, "minus"),
+    Minus(Tokenizer.Keyword.Minus, "minus"),
 }
 
 enum class BinaryOperators(val token: Tokenizer.Keyword, val priority: Int, val rewrite: String) {
@@ -124,7 +124,7 @@ class Parser(val inputAsText: String, val tokens: List<Token>) {
         return null
     }
 
-    fun parseExpressionHead(priority: Int): Expression? {
+    fun parseExpressionHead(): Expression? {
         val ret = when {
             front.tokenName == "StringLit" -> {
                 val nom = eat(); return Expression.StringLit(nom.payload!!); }
@@ -138,8 +138,9 @@ class Parser(val inputAsText: String, val tokens: List<Token>) {
                 // Minus is bullshit
                 if (front.tokenName == "NumLit") {
                     val nom = eat()
-                    return Expression.NumLit("-" + nom.payload!!);
-                } else Expression.RefSymbol("minus")
+                    return Expression.NumLit("-" + nom.payload!!)
+                }
+                else throw Exception("This is explicitly disallowed, '-' is not a valid identifier.")
             }
             accept("if") -> {
                 val condition = parseExpression(0)!!
@@ -181,17 +182,28 @@ class Parser(val inputAsText: String, val tokens: List<Token>) {
         return ret
     }
 
+    fun parseUnaryOp(): Expression? {
+        for (unop in UnaryOperators.values()) {
+            if (unop.token == Tokenizer.Keyword.Minus && i + 1 < tokens.size && tokens[i+1].tokenName == "NumLit")
+                continue
+            if (accept(unop.token.symbol)) {
+                return Expression.Invocation(Expression.RefSymbol(unop.rewrite), listOf(parseUnaryOp()!!))
+            }
+        }
+        return parseExpressionHead()
+    }
+
     // fn_a arg0 arg1
     fun parseExpression(priority: Int): Expression? {
-        var first = parseExpressionHead(priority) ?: return null
+        var first = parseUnaryOp() ?: return null
 
-        outer@
+        outerBinop@
         while (true) {
             for (binop in BinaryOperators.values()) {
                 if ((binop.priority >= priority) && accept(binop.token.symbol)) {
                     val rhs = parseExpression(binop.priority)!!
                     first = Expression.Invocation(Expression.RefSymbol(binop.rewrite), listOf(first, rhs))
-                    continue@outer
+                    continue@outerBinop
                 }
             }
             break
@@ -207,7 +219,7 @@ class Parser(val inputAsText: String, val tokens: List<Token>) {
         val typeAnnotation = if (priority == 0) parseTypeAnnotation() else null
         if (typeAnnotation == null) {
             while (true) {
-                val arg = parseExpressionHead(priority) ?: break
+                val arg = parseExpressionHead() ?: break
                 following += arg
             }
         } else {

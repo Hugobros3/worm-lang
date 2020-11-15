@@ -64,6 +64,7 @@ class TestParser {
             let v = z - w;
             
             let t = ---------42;
+            let u = ---------t;
             
             let a = - 4 * 5 : A;
             let b = 5 * -4 : A;
@@ -71,6 +72,11 @@ class TestParser {
 
         test("""
             let s = map ((x, y, z) => x + y + z) arr;
+        """.trimIndent())
+
+        test("""
+            let x = sum 2 (2 * reverse);
+            let y = 3 * 3 francis;
         """.trimIndent())
     }
 }
