@@ -11,13 +11,13 @@ class TestParser {
             val p = Parser(str, Tokenizer(str).tokenize())
             val pp = p.parseProgram()
             println(pp)
-            println(pp.print(false))
+            println(pp.print())
 
-            val printed = pp.print(false)
+            val printed = pp.print()
             val againParser = Parser(printed, Tokenizer(printed).tokenize())
             val reparsed = againParser.parseProgram()
             println(reparsed.yieldValue)
-            println(reparsed.yieldValue.print(false))
+            println(reparsed.yieldValue.print())
             assertTrue(pp == reparsed.yieldValue)
         }
 
