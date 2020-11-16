@@ -14,9 +14,9 @@ enum class InfixSymbol(val token: Keyword, val priority: Int, val rewrite: Strin
 
     Plus(Keyword.Plus, 40, "plus"),
     Minus(Keyword.Minus, 40, "minus"),
-    Multiply(Keyword.Multiply, 80, "multiply"),
-    Divide(Keyword.Divide, 80, "divide"),
-    Modulo(Keyword.Modulo, 80, "modulo"),
+    Multiply(Keyword.Multiply, 60, "multiply"),
+    Divide(Keyword.Divide, 60, "divide"),
+    Modulo(Keyword.Modulo, 60, "modulo"),
 
     InfEq(Keyword.InfEq, 20, "infeq"),
     Inf(Keyword.Inf, 20, "inf"),
