@@ -66,6 +66,13 @@ class Parser(private val inputAsText: String, private val tokens: List<Tokenizer
         return false
     }
 
+    private fun expect(tokenName: String): Tokenizer.Token {
+        if (!accept(tokenName)) {
+            throw Exception("expected '$tokenName' at $here but got '${front.tokenName}'")
+        }
+        return tokens[i - 1]
+    }
+
     private fun eat(tokenName: String): Tokenizer.Token {
         if (!accept(tokenName)) {
             throw Exception("expected '$tokenName' at $here but got '${front.tokenName}'")
@@ -78,12 +85,17 @@ class Parser(private val inputAsText: String, private val tokens: List<Tokenizer
         return tokens[i - 1]
     }
 
+    private fun expectIdentifier(): String {
+        val id = expect("Identifier")
+        return id.payload!!
+    }
+
     private fun eatIdentifier(): String {
         val id = eat("Identifier")
         return id.payload!!
     }
 
-    private fun eatSequenceContents(): Expression.Sequence {
+    private fun parseSequenceContents(): Expression.Sequence {
         val instructions = mutableListOf<Instruction>()
         while (true) {
             instructions += acceptInstruction() ?: break
@@ -95,26 +107,26 @@ class Parser(private val inputAsText: String, private val tokens: List<Tokenizer
     private fun acceptInstruction(): Instruction? {
         when {
             accept("def") -> {
-                val identifier = eatIdentifier()
+                val identifier = expectIdentifier()
                 val type = acceptTypeAnnotation()
-                eat("::")
+                expect("::")
                 val body = acceptExpression(0) ?: unexpectedToken("expression")
-                eat(";")
+                expect(";")
                 return Instruction.Def(identifier, emptyList(), type, body)
             }
             accept("let") -> {
-                val identifier = eatIdentifier()
+                val identifier = expectIdentifier()
                 val type = acceptTypeAnnotation()
-                eat("=")
+                expect("=")
                 val rhs = acceptExpression(0) ?: unexpectedToken("expression")
-                eat(";")
+                expect(";")
                 return Instruction.Let(identifier, false, type, rhs)
             }
             accept("var") -> {
-                val identifier = eatIdentifier()
+                val identifier = expectIdentifier()
                 val type = acceptTypeAnnotation()
                 val defaultValue = if (accept("=")) acceptExpression(0) else null
-                eat(";")
+                expect(";")
                 return Instruction.Var(identifier, type, defaultValue)
             }
         }
@@ -138,25 +150,18 @@ class Parser(private val inputAsText: String, private val tokens: List<Tokenizer
                 val id = eatIdentifier()
                 return Expression.RefSymbol(id)
             }
-            accept("-") -> {
-                // Minus is bullshit
-                if (front.tokenName == "NumLit") {
-                    val nom = eat()
-                    return Expression.NumLit("-" + nom.payload!!)
-                } else throw Exception("This is explicitly disallowed, '-' is not a valid identifier.")
-            }
             accept("if") -> {
                 val condition = acceptExpression(0)!!
-                eat("then")
+                expect("then")
                 val ifTrue = acceptExpression(0)!!
-                eat("else")
+                expect("else")
                 val ifFalse = acceptExpression(0)!!
                 return Expression.Conditional(condition, ifTrue, ifFalse)
             }
             accept("(") -> {
                 val inside = acceptExpression(0)
                 return if (inside == null) {
-                    eat(")")
+                    expect(")")
                     return Expression.Unit
                 } else {
                     if (accept(")")) {
@@ -168,7 +173,7 @@ class Parser(private val inputAsText: String, private val tokens: List<Tokenizer
                             if (accept(")")) {
                                 return Expression.Tuple(tuple)
                             }
-                            eat(",")
+                            expect(",")
                             tuple += acceptExpression(0)!!
                         }
                         null // don't worry about it
@@ -176,8 +181,8 @@ class Parser(private val inputAsText: String, private val tokens: List<Tokenizer
                 }
             }
             accept("{") -> {
-                val seq = eatSequenceContents()
-                eat("}")
+                val seq = parseSequenceContents()
+                expect("}")
                 return seq
             }
             else -> return null
@@ -186,8 +191,8 @@ class Parser(private val inputAsText: String, private val tokens: List<Tokenizer
 
     private fun acceptPrefixedPrimaryExpr(): Expression? {
         for (prefix in PrefixSymbol.values()) {
-            if (prefix.token == Keyword.Minus && i + 1 < tokens.size && tokens[i + 1].tokenName == "NumLit")
-                continue
+            //if (prefix.token == Keyword.Minus && i + 1 < tokens.size && tokens[i + 1].tokenName == "NumLit")
+            //    continue
             if (accept(prefix.token.symbol)) {
                 return Expression.Invocation(listOf(Expression.RefSymbol(prefix.rewrite), acceptPrefixedPrimaryExpr()!!))
             }
@@ -208,7 +213,7 @@ class Parser(private val inputAsText: String, private val tokens: List<Tokenizer
         is Expression.Conditional -> false
     }
 
-    private fun eatExpression(priority: Int) = acceptExpression(priority) ?: expected("expression")
+    private fun expectExpression(priority: Int) = acceptExpression(priority) ?: expected("expression")
 
     private fun acceptExpression(priority: Int): Expression? {
         var accumulator = acceptPrefixedPrimaryExpr() ?: return null
@@ -226,7 +231,7 @@ class Parser(private val inputAsText: String, private val tokens: List<Tokenizer
                         continue@outerBinop
                     }
                     else if (accept(infix.token.symbol)) {
-                        val rhs = eatExpression(infix.priority)
+                        val rhs = expectExpression(infix.priority)
                         when (infix) {
                             InfixSymbol.Ascription -> {
                                 accumulator = Expression.Ascription(accumulator, rhs)
@@ -254,7 +259,7 @@ class Parser(private val inputAsText: String, private val tokens: List<Tokenizer
     }
 
     fun parseProgram(): Expression.Sequence {
-        val p = eatSequenceContents()
+        val p = parseSequenceContents()
         if (front.tokenName != "EOF")
             expectedToken("EOF")
         return p
