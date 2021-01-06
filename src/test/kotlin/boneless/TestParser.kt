@@ -10,14 +10,14 @@ class TestParser {
         fun test(str: String) {
             val p = Parser(str, Tokenizer(str).tokenize())
             val pp = p.parseProgram()
-            println(pp)
+            //println(pp)
             println(pp.prettyPrint())
 
             val printed = pp.prettyPrint()
             val againParser = Parser(printed, Tokenizer(printed).tokenize())
             val reparsed = againParser.parseProgram()
-            println(reparsed.yieldValue)
-            println(reparsed.yieldValue!!.prettyPrint())
+            //println(reparsed.yieldValue)
+            //println(reparsed.yieldValue!!.prettyPrint())
             assertTrue(pp == reparsed.yieldValue)
         }
 
@@ -88,7 +88,33 @@ class TestParser {
         """.trimIndent())
 
         test("""
-            def analyze :: s: &(I32, I32) => @S;
+            def deref_s_ptr :: s: ref [I32 * I32] => @s;
         """.trimIndent())
+    }
+
+    @Test
+    fun testTypeParser() {
+        fun test(str: String) {
+            val p = Parser(str, Tokenizer(str).tokenize())
+            val t = p.eatType()
+
+            println(t)
+            println(t.prettyPrint())
+        }
+
+        test("i32")
+        test("[]")
+        test("[i32]")
+        test("[x :: i32, y :: i32]")
+        test("[x :: i32, y :: i32, z :: i32]")
+        test("[left :: f32 | right :: i32]")
+        test("[left :: f32 | right :: i32 | center :: []]")
+        test("[i32 * i32 * i32]")
+        test("[i32 * i32 * f32]")
+        test("[f32..]")
+        test("[f32^6]")
+        test("[Option [i32]]")
+        test("Option [i32]")
+        test("[i32^1]")
     }
 }

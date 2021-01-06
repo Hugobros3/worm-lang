@@ -133,11 +133,79 @@ class Parser(private val inputAsText: String, private val tokens: List<Tokenizer
         return null
     }
 
-    private fun acceptTypeAnnotation(): Expression? {
+    private fun acceptTypeAnnotation(): Type? {
         if (accept(":")) {
-            return acceptExpression(0)
+            return eatType()
         }
         return null
+    }
+
+    fun eatType(insideBrackets: Boolean = false, insideTuple: Boolean = false): Type {
+        val un_normalized = if (accept("[")) {
+            if (accept("]"))
+                Type.TupleType(emptyList(), null)
+            else {
+                val inside = eatType(insideBrackets = true)
+                eat("]")
+                inside
+            }
+        } else if (front.tokenName == "Identifier") {
+            val id = eatIdentifier()
+            if (insideBrackets && accept("::")) {
+                val type = eatType()
+                // Either a struct/enum type
+                if (front.tokenName == "|") {
+                    // Is an enum type
+                    val elements = mutableListOf(type)
+                    val names = mutableListOf(id)
+                    while (accept("|")) {
+                        names += eatIdentifier()
+                        eat("::")
+                        elements += eatType()
+                    }
+                    Type.EnumType(elements, names)
+                } else {
+                    val elements = mutableListOf(type)
+                    val names = mutableListOf(id)
+                    while (accept(",")) {
+                        names += eatIdentifier()
+                        eat("::")
+                        elements += eatType()
+                    }
+                    Type.TupleType(elements, names)
+                }
+            } else if (insideBrackets && accept("^")) {
+                // definite array
+                val type = Type.TypeApplication(id, emptyList())
+                val size = eat("NumLit").payload!!.toInt()
+                if (size == 0)
+                    throw Exception("Zero sized arrays are not supported")
+                Type.ArrayType(type, size)
+            } else if (insideBrackets && accept("..")) {
+                // indefinite array
+                val type = Type.TypeApplication(id, emptyList())
+                Type.ArrayType(type, -1)
+            } else if (front.tokenName == "*" && !insideTuple) {
+                // tuple type
+                val type = Type.TypeApplication(id, emptyList())
+                val elements = mutableListOf<Type>(type)
+                while (accept("*")) {
+                    elements += eatType(insideTuple = true)
+                }
+                Type.TupleType(elements, null)
+            } else {
+                // type application
+                val ops = mutableListOf<Expression>()
+                while (true) {
+                    val expr = acceptExpression(0) ?: break
+                    ops += expr
+                }
+                Type.TypeApplication(id, ops)
+            }
+        } else {
+            throw Exception("Not a type")
+        }
+        return un_normalized.normalize()
     }
 
     private fun acceptPrimaryExpression(): Expression? {
@@ -180,6 +248,12 @@ class Parser(private val inputAsText: String, private val tokens: List<Tokenizer
                     }
                 }
             }
+            accept("[") -> {
+                val type = eatType(insideBrackets = true)
+                val e = Expression.QuoteType(type)
+                eat("]")
+                return e
+            }
             accept("{") -> {
                 val seq = parseSequenceContents()
                 expect("}")
@@ -193,17 +267,23 @@ class Parser(private val inputAsText: String, private val tokens: List<Tokenizer
         for (prefix in PrefixSymbol.values()) {
             //if (prefix.token == Keyword.Minus && i + 1 < tokens.size && tokens[i + 1].tokenName == "NumLit")
             //    continue
-            if (accept(prefix.token.symbol)) {
-                return Expression.Invocation(listOf(Expression.RefSymbol(prefix.rewrite), acceptPrefixedPrimaryExpr()!!))
+            if (accept(prefix.token.str)) {
+                return Expression.Invocation(
+                    listOf(
+                        Expression.RefSymbol(prefix.rewrite),
+                        acceptPrefixedPrimaryExpr()!!
+                    )
+                )
             }
         }
         return acceptPrimaryExpression()
     }
 
-    private fun Expression.canBePattern() = when(this) {
+    private fun Expression.canBePattern() = when (this) {
         Expression.Unit -> true
         is Expression.StringLit -> true
         is Expression.NumLit -> true
+        is Expression.QuoteType -> true
         is Expression.RefSymbol -> true
         is Expression.Tuple -> true
         is Expression.Invocation -> true
@@ -229,14 +309,14 @@ class Parser(private val inputAsText: String, private val tokens: List<Tokenizer
                             else -> Expression.Invocation(listOf(accumulator, following))
                         }
                         continue@outerBinop
-                    }
-                    else if (accept(infix.token.symbol)) {
-                        val rhs = expectExpression(infix.priority)
+                    } else if (accept(infix.token.str)) {
                         when (infix) {
                             InfixSymbol.Ascription -> {
-                                accumulator = Expression.Ascription(accumulator, rhs)
+                                val type = eatType()
+                                accumulator = Expression.Ascription(accumulator, type)
                             }
                             InfixSymbol.Map -> {
+                                val rhs = expectExpression(infix.priority)
                                 val oldfirst = accumulator
                                 accumulator = when {
                                     oldfirst is Expression.Invocation -> Expression.Function(oldfirst.arguments, rhs)
@@ -245,7 +325,14 @@ class Parser(private val inputAsText: String, private val tokens: List<Tokenizer
                                 }
                             }
                             else -> {
-                                accumulator = Expression.Invocation(listOf(Expression.RefSymbol(infix.rewrite!!), accumulator, rhs))
+                                val rhs = expectExpression(infix.priority)
+                                accumulator = Expression.Invocation(
+                                    listOf(
+                                        Expression.RefSymbol(infix.rewrite!!),
+                                        accumulator,
+                                        rhs
+                                    )
+                                )
                             }
                         }
                         continue@outerBinop

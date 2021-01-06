@@ -5,7 +5,7 @@ val numbers = "0123456789"
 fun Char.canStartIdentifier() = isLetter() || this == '_'
 fun Char.canMakeUpIdentifier() = canStartIdentifier() || this in numbers
 
-enum class Keyword(val symbol: String) {
+enum class Keyword(val str: String) {
     /** This is never parsed */
     None(""),
 
@@ -25,6 +25,7 @@ enum class Keyword(val symbol: String) {
     Else("else"),
 
     DefinitionSeparator("::"),
+    Range(".."),
     Map("=>"),
     Eq("=="),
     NotEq("!="),
@@ -107,7 +108,7 @@ class Tokenizer(val input: String) {
 
     fun acceptKeyword(): Boolean {
         for (keyword in Keyword.values()) {
-            if (keyword != Keyword.None && acceptToken(keyword.symbol))
+            if (keyword != Keyword.None && acceptToken(keyword.str))
                 return true
         }
         return false
@@ -155,7 +156,7 @@ class Tokenizer(val input: String) {
                 acceptKeyword() -> {}
                 input[i].canStartIdentifier() -> {
                     var identifier = ""
-                    while (input[i].canMakeUpIdentifier()) {
+                    while (i < input.length && input[i].canMakeUpIdentifier()) {
                         identifier += input[i]
                         i++
                     }
