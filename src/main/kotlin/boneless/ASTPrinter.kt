@@ -19,15 +19,20 @@ private class PrettyPrinter(val resugarizePrefixAndInfixSymbols: Boolean = true)
 
     private fun Type?.printTypeAnnotation(): String = this?.let { ": " + it.print() } ?: ""
 
+    fun Value.print(firstOperand: Boolean = true): String = when (this) {
+        is Value.NumLiteral -> if (num.startsWith("-") && !firstOperand) "($num)" else num
+        is Value.StrLiteral -> "\"$str\""
+        is Value.ListLiteral -> "(" + list.joinToString(", ") { it.print() } + ")"
+        is Value.DictionaryLiteral -> "(" + dict.map { (id, e) -> "$id = $e" }.joinToString(", ") + ")"
+    }
+
     fun Expression?.print(infixOpPriority: Int = -1, firstOperand: Boolean = true): String {
         var p = 0
         fun open() = if (p <= infixOpPriority) "(" else ""
         fun close() = if (p <= infixOpPriority) ")" else ""
         return when (this) {
             null -> ""
-            Expression.Unit -> "()"
-            is Expression.StringLit -> "\"$lit\""
-            is Expression.NumLit -> if (lit.startsWith("-") && !firstOperand) "($lit)" else lit
+            is Expression.QuoteValue -> value.print(firstOperand)
             is Expression.QuoteType -> "[" + type.print() + "]"
             is Expression.RefSymbol -> symbol
             is Expression.Invocation -> {
@@ -46,13 +51,14 @@ private class PrettyPrinter(val resugarizePrefixAndInfixSymbols: Boolean = true)
                 open() + arguments.mapIndexed { i, it -> it.print(p, i == 0) }
                     .joinToString(" ") + close()
             }
-            is Expression.Tuple -> "(" + elements.joinToString(", ") { it.print() } + ")"
+            is Expression.ListExpression -> "(" + elements.joinToString(", ") { it.print() } + ")"
+            is Expression.DictionaryExpression -> "(" + elements.map { (id, e) -> "$id = ${e.print()}" }.joinToString(", ") + ")"
             is Expression.Sequence -> "{\n" + instructions.joinToString("") { shift(it.print()) + "\n" } + if (yieldValue != null) (shift(
                 yieldValue.print(0)
             ) + "\n") else "" + "}"
             is Expression.Function -> {
-                p = InfixSymbol.Map.priority
-                open() + parameters.joinToString(" ") { it.print(p) } + " => " + body.print(p) + close()
+                //p = InfixSymbol.Map.priority
+                open() + "fn " + parameters.joinToString(" ") { it.print() } + " => " + body.print() + close()
             }
             is Expression.Conditional -> "if " + condition.print() + " then " + ifTrue.print() + " else " + ifFalse.print()
             is Expression.Ascription -> {
@@ -62,23 +68,18 @@ private class PrettyPrinter(val resugarizePrefixAndInfixSymbols: Boolean = true)
         }
     }
 
-    fun Type.print(): String = when (this) {
-        is Type.TypeApplication -> if (ops.isEmpty()) name else name + " " + ops.joinToString(" ") { it.print(0) }
-        is Type.TupleType -> "[" + (if (elements.isNotEmpty()) {
-            if (names != null)
-                (elements.indices).joinToString(", ") { i ->
-                    names[i] + "::" + elements[i].print()
-                }
-            else
-                (elements.indices).joinToString(" * ") { i ->
-                    elements[i].print()
-                }
-        } else "") + "]"
-        is Type.ArrayType -> "[" + elementType.print() + (if (size == -1) ".." else "^$size") + "]"
-        is Type.EnumType -> "[" +
-                (elements.indices).joinToString(" | ") { i ->
-                    names[i] + "::" + elements[i].print()
-                } + "]"
+    fun Type.print(): String = when {
+        this is Type.TypeApplication -> if (ops.isEmpty()) name else name + " " + ops.joinToString(" ") { it.print(0) }
+
+        this is Type.TupleType && elements.isEmpty() -> "[]"
+        this is Type.TupleType && elements.isNotEmpty() -> "[" + elements.joinToString(" * ") { e -> e.print() } + "]"
+
+        this is Type.RecordType -> "[" + elements.joinToString(", ") { (name, type) -> name + "::" + type.print() } + "]"
+
+        this is Type.ArrayType -> "[" + elementType.print() + (if (size == -1) ".." else "^$size") + "]"
+
+        this is Type.EnumType -> "[" + elements.joinToString(" | ") { (name, type) -> name + "::" + type.print() } + "]"
+        else -> throw Exception("Unprintable type")
     }
 
     fun shift(str: String) = str.lines().joinToString("\n") { "  $it" }

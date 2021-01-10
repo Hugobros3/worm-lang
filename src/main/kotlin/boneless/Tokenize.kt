@@ -19,6 +19,7 @@ enum class Keyword(val str: String) {
     Def("def"),
     Let("let"),
     Var("var"),
+    Fn("fn"),
 
     If("if"),
     Then("then"),
