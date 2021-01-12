@@ -21,7 +21,8 @@ enum class Keyword(val str: String) {
     Var("var"),
     Fn("fn"),
     As("as"),
-
+    Data("data"),
+    Type("type"),
     If("if"),
     Then("then"),
     Else("else"),

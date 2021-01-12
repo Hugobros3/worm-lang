@@ -17,7 +17,11 @@ fun Type.prettyPrint(): String {
 
 private class PrettyPrinter(val resugarizePrefixAndInfixSymbols: Boolean = true) {
     fun Module.print() = defs.joinToString("\n") { it.print() }
-    fun Def.print() = "def $identifier" + type.printTypeAnnotation() + " :: " + body.print() + ";"
+    fun Def.print() = "def $identifier" + type.printTypeAnnotation() + " :: " + when(body) {
+        is Def.DefBody.ExprBody -> body.expr.print(0)
+        is Def.DefBody.DataCtor -> "data " + body.type.print()
+        is Def.DefBody.TypeAlias -> "type " + body.type.print()
+    } + ";"
 
     private fun Instruction.print() = when (this) {
         is Instruction.Let -> "let $identifier" + type.printTypeAnnotation() + " = " + body.print() + ";"
@@ -90,6 +94,8 @@ private class PrettyPrinter(val resugarizePrefixAndInfixSymbols: Boolean = true)
         this is Type.ArrayType -> "[" + elementType.print() + (if (size == -1) ".." else "^$size") + "]"
 
         this is Type.EnumType -> "[" + elements.joinToString(" | ") { (name, type) -> name + "::" + type.print() } + "]"
+        this is Type.FnType -> dom.print() + " -> " + codom.print()
+        this is Type.NominalType -> name
         else -> throw Exception("Unprintable type")
     }
 

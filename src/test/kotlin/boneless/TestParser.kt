@@ -50,14 +50,14 @@ class TestParser {
             """.trimIndent())
 
         testModule("""
-                def PersonIdentity :: [
+                def PersonIdentity :: data [
                     fullName :: String,
                     dob :: Date
                 ];
             """.trimIndent())
 
         testModule("""
-                def x: String :: "a";
+                // def x: String :: "a";
                 def xx :: "a"; // TS will infer String 
             """.trimIndent())
 
@@ -128,8 +128,8 @@ class TestParser {
         testParseType("[[I32, I32], [], f32]")
         testParseType("[f32..]")
         testParseType("[f32^6]")
-        testParseType("[Option [I32]]")
-        testParseType("Option [I32]")
+        //testParseType("[Option [I32]]")
+        //testParseType("Option [I32]")
         testParseType("[I32^1]")
     }
 

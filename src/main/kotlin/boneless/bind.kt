@@ -43,7 +43,11 @@ class BindHelper(private val module: Module) {
     }
 
     internal fun bind(def: Def) {
-        bind(def.body)
+        when(def.body) {
+            is Def.DefBody.ExprBody -> bind(def.body.expr)
+            is Def.DefBody.DataCtor -> bind(def.body.type)
+            is Def.DefBody.TypeAlias -> bind(def.body.type)
+        }
     }
 
     fun bind(inst: Instruction) {
@@ -67,7 +71,7 @@ class BindHelper(private val module: Module) {
 
             is Expression.ListExpression -> expr.list.forEach(::bind)
             is Expression.RecordExpression -> expr.fields.values.forEach(::bind)
-            is Expression.Invocation -> expr.args.forEach(::bind)
+            is Expression.Invocation -> { bind(expr.target) ; expr.args.forEach(::bind) }
 
             is Expression.Conditional -> {
                 bind(expr.condition)

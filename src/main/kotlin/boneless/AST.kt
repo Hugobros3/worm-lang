@@ -14,17 +14,28 @@ sealed class Type {
         val isDefinite: Boolean get() = size != 0
     }
     data class EnumType(val elements: List<Pair<Identifier, Type>>) : Type()
+    data class NominalType(val name: Identifier, val dataType: Type): Type()
+    data class FnType(val dom: Type, val codom: Type, val constructorFor: NominalType? = null) : Type()
 }
 
 data class Module(val defs: Set<Def>)
-data class Def(val identifier: Identifier, val parameters: List<DefParameter>, val body: Expression) {
+data class Def(val identifier: Identifier, val parameters: List<DefParameter>, val annotatedType: Type?, val body: DefBody) {
     init {
         assert(parameters.isEmpty()) { "unsupported" }
     }
 
+    sealed class DefBody {
+        data class ExprBody(val expr: Expression): DefBody()
+        data class DataCtor(val type: Type): DefBody() {
+            // Created by type-checker
+            lateinit var nominalType: Type.NominalType
+        }
+        data class TypeAlias(val type: Type): DefBody()
+    }
+
     // Set by type checker
     lateinit var type: Type
-    var is_type: Boolean = false
+    val is_type: Boolean = body !is DefBody.ExprBody
 
     data class DefParameter(val identifier: Identifier)
 }

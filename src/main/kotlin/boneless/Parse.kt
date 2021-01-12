@@ -145,11 +145,17 @@ class Parser(private val inputAsText: String, private val tokens: List<Tokenizer
         val defs = mutableListOf<Def>()
         while (accept("def")) {
             val identifier = expectIdentifier()
-            //val type = acceptTypeAnnotation()
+            val annotatedType = acceptTypeAnnotation()
             expect("::")
-            val body = acceptExpression(0) ?: unexpectedToken("expression")
+
+            val body = when {
+                accept("data") -> { Def.DefBody.DataCtor(expectType()) }
+                accept("type") -> { Def.DefBody.TypeAlias(expectType()) }
+                else -> { Def.DefBody.ExprBody(acceptExpression(0) ?: unexpectedToken("expression")) }
+            }
+
             expect(";")
-            defs += Def(identifier, emptyList(), body)
+            defs += Def(identifier, emptyList(), annotatedType, body)
         }
         return Module(defs.toSet())
     }
@@ -285,6 +291,9 @@ class Parser(private val inputAsText: String, private val tokens: List<Tokenizer
                 val nom = eat(); return Expression.QuoteValue(Value.NumLiteral(nom.payload!!)); }
             front.tokenName == "Identifier" -> {
                 val id = eatIdentifier()
+                val prim_type = PrimitiveType.values().find { it.name == id }
+                if (prim_type != null)
+                    return Expression.QuoteType(Type.PrimitiveType(prim_type))
                 return Expression.IdentifierRef(id)
             }
             accept("if") -> {
