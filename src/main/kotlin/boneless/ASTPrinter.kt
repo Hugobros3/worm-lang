@@ -30,7 +30,7 @@ private class PrettyPrinter(val resugarizePrefixAndInfixSymbols: Boolean = true)
         is Value.NumLiteral -> if (num.startsWith("-") && !firstOperand) "($num)" else num
         is Value.StrLiteral -> "\"$str\""
         is Value.ListLiteral -> "(" + list.joinToString(", ") { it.print() } + ")"
-        is Value.DictionaryLiteral -> "(" + dict.map { (id, e) -> "$id = $e" }.joinToString(", ") + ")"
+        is Value.RecordLiteral -> "(" + fields.map { (id, e) -> "$id = $e" }.joinToString(", ") + ")"
     }
 
     fun Expression?.print(infixOpPriority: Int = -1, firstOperand: Boolean = true): String {
@@ -58,7 +58,7 @@ private class PrettyPrinter(val resugarizePrefixAndInfixSymbols: Boolean = true)
                 open() + target.print() + " " + args.mapIndexed { i, it -> it.print(p, i == 0) }.joinToString(" ") + close()
             }
             is Expression.ListExpression -> "(" + list.joinToString(", ") { it.print() } + ")"
-            is Expression.DictionaryExpression -> "(" + dict.map { (id, e) -> "$id = ${e.print()}" }.joinToString(", ") + ")"
+            is Expression.RecordExpression -> "(" + fields.map { (id, e) -> "$id = ${e.print()}" }.joinToString(", ") + ")"
             is Expression.Sequence -> "{\n" + instructions.joinToString("") { shift(it.print()) + "\n" } + if (yieldValue != null) (shift(
                 yieldValue.print(0)
             ) + "\n") else "" + "}"
@@ -98,7 +98,7 @@ private class PrettyPrinter(val resugarizePrefixAndInfixSymbols: Boolean = true)
             is Pattern.Binder -> id
             is Pattern.Literal -> (if (value.isUnit) "" else "\\") + value.print(firstOperand)
             is Pattern.ListPattern -> "(" + list.joinToString(", ") { it.print(firstOperand) } + ")"
-            is Pattern.DictPattern -> "(" + dict.map { (id, p) -> "$id = ${p.print()}" }.joinToString(", ") + ")"
+            is Pattern.RecordPattern -> "(" + fields.map { (id, p) -> "$id = ${p.print()}" }.joinToString(", ") + ")"
             is Pattern.CtorPattern -> target + " " + args.joinToString(" ") { it.print(firstOperand) }
             is Pattern.TypeAnnotatedPattern -> inside.print() + " : " + type.print()
         }

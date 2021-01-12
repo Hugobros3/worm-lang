@@ -145,11 +145,11 @@ class Parser(private val inputAsText: String, private val tokens: List<Tokenizer
         val defs = mutableListOf<Def>()
         while (accept("def")) {
             val identifier = expectIdentifier()
-            val type = acceptTypeAnnotation()
+            //val type = acceptTypeAnnotation()
             expect("::")
             val body = acceptExpression(0) ?: unexpectedToken("expression")
             expect(";")
-            defs += Def(identifier, emptyList(), type, body)
+            defs += Def(identifier, emptyList(), body)
         }
         return Module(defs.toSet())
     }
@@ -248,7 +248,7 @@ class Parser(private val inputAsText: String, private val tokens: List<Tokenizer
             val dict = mutableMapOf<Identifier, Expression>(firstId to acceptExpression(0)!!)
             while (true) {
                 if (accept(endToken)) {
-                    return Expression.DictionaryExpression(dict)
+                    return Expression.RecordExpression(dict)
                 } else {
                     expect(",")
                     val id = expectIdentifier()
@@ -403,7 +403,7 @@ class Parser(private val inputAsText: String, private val tokens: List<Tokenizer
             val dict = mutableMapOf(firstId to eatPattern())
             while (true) {
                 if (accept(endToken)) {
-                    return Pattern.DictPattern(dict)
+                    return Pattern.RecordPattern(dict)
                 } else {
                     expect(",")
                     val id = expectIdentifier()

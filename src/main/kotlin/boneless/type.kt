@@ -44,5 +44,105 @@ enum class PrimitiveType(val size: Int) {
     ;
 }
 
-class ModuleType {
+class TypeChecker(val module: Module) {
+    val stack = mutableListOf<Frame>()
+
+    class Frame(val typingWhat: Any)
+
+    fun enter(what: Any): Boolean {
+        val oh_no = stack.any { it.typingWhat == what }
+        if (oh_no) {
+            error("The type checker has run into recursive problems typing $what")
+        }
+        stack.add(0, Frame(what))
+        return oh_no
+    }
+
+    fun leave() = stack.removeAt(0)
+    fun <R> in_frame(what: Any, f: () -> R): R {
+        enter(what)
+        val r = f()
+        leave()
+        return r
+    }
+
+    fun type() {
+        for (def in module.defs) {
+            def.type = infer(def)
+        }
+    }
+
+    fun infer(def: Def): Type = in_frame(def) {
+        if (def.body is Expression.QuoteType) {
+            def.is_type = true
+            // TODO check/resolve types ?
+            def.body.type
+        } else {
+            enter(def.body)
+            def.is_type = false
+            infer(def.body)
+        }
+    }
+
+    fun infer(expr: Expression): Type = in_frame(expr) {
+        when (expr) {
+            is Expression.QuoteValue -> infer(expr.value)
+            is Expression.QuoteType -> TODO()
+            is Expression.IdentifierRef -> TODO()
+            is Expression.ListExpression -> TODO()
+            is Expression.RecordExpression -> TODO()
+            is Expression.Invocation -> TODO()
+            is Expression.Function -> TODO()
+            is Expression.Ascription -> TODO()
+            is Expression.Cast -> TODO()
+            is Expression.Sequence -> {
+                for (inst in expr.instructions)
+                    check(inst)
+                if(expr.yieldValue == null)
+                    unit_type()
+                else
+                    infer(expr.yieldValue)
+            }
+            is Expression.Conditional -> TODO()
+        }
+    }
+
+    fun infer(value: Value): Type = in_frame(value) {
+        when (value) {
+            is Value.NumLiteral -> if (value.num.toDouble() == value.num.toInt().toDouble()) Type.PrimitiveType(PrimitiveType.I32) else Type.PrimitiveType(PrimitiveType.F32)
+            is Value.StrLiteral -> TODO()
+            is Value.ListLiteral -> {
+                val types = value.list.map { infer(it) }
+                if (types.isEmpty())
+                    unit_type()
+                //else if (types.size == 1)
+                //    types[0]
+                else if (types.isNotEmpty() && types.all { it == types[0] })
+                    Type.ArrayType(types[0], types.size)
+                else
+                    Type.TupleType(types)
+            }
+            is Value.RecordLiteral -> {
+                val types = value.fields.map { (f, v) -> Pair(f, infer(v)) }
+                Type.RecordType(types)
+            }
+        }
+    }
+
+    fun check(inst: Instruction) = in_frame(inst) {
+        when(inst) {
+            is Instruction.Let -> {
+                val expected_type = inst.type
+                if (expected_type != null)
+                    check(inst.body, expected_type)
+            }
+            is Instruction.Evaluate -> {
+                val inferred = infer(inst.e)
+            }
+        }
+    }
+
+    fun check(expr: Expression, expected_type: Type) {
+
+    }
 }

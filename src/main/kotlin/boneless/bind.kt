@@ -66,7 +66,7 @@ class BindHelper(private val module: Module) {
             is Expression.Ascription -> { bind(expr.e); bind(expr.type) }
 
             is Expression.ListExpression -> expr.list.forEach(::bind)
-            is Expression.DictionaryExpression -> expr.dict.values.forEach(::bind)
+            is Expression.RecordExpression -> expr.fields.values.forEach(::bind)
             is Expression.Invocation -> expr.args.forEach(::bind)
 
             is Expression.Conditional -> {
@@ -121,7 +121,7 @@ class BindHelper(private val module: Module) {
             }
             is Pattern.Literal -> {}
             is Pattern.ListPattern -> pattern.list.forEach(::bind)
-            is Pattern.DictPattern -> pattern.dict.values.forEach(::bind)
+            is Pattern.RecordPattern -> pattern.fields.values.forEach(::bind)
             is Pattern.CtorPattern -> {
                 pattern.resolved = this[pattern.target]
                 pattern.args.forEach(::bind)
