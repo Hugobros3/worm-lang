@@ -79,10 +79,11 @@ private class PrettyPrinter(val resugarizePrefixAndInfixSymbols: Boolean = true)
     }
 
     fun Type.print(): String = when {
+        this is Type.PrimitiveType -> primitiveType.name
         this is Type.TypeApplication -> if (ops.isEmpty()) name else name + " " + ops.joinToString(" ") { it.print(0) }
 
         this is Type.TupleType && elements.isEmpty() -> "[]"
-        this is Type.TupleType && elements.isNotEmpty() -> "[" + elements.joinToString(" * ") { e -> e.print() } + "]"
+        this is Type.TupleType && elements.isNotEmpty() -> "[" + elements.joinToString(", ") { e -> e.print() } + "]"
 
         this is Type.RecordType -> "[" + elements.joinToString(", ") { (name, type) -> name + "::" + type.print() } + "]"
 
@@ -99,7 +100,7 @@ private class PrettyPrinter(val resugarizePrefixAndInfixSymbols: Boolean = true)
             is Pattern.ListPattern -> "(" + list.joinToString(", ") { it.print(firstOperand) } + ")"
             is Pattern.DictPattern -> "(" + dict.map { (id, p) -> "$id = ${p.print()}" }.joinToString(", ") + ")"
             is Pattern.CtorPattern -> target + " " + args.joinToString(" ") { it.print(firstOperand) }
-            is Pattern.TypeAnnotatedPattern -> inside.print() + " : " + annotation.print()
+            is Pattern.TypeAnnotatedPattern -> inside.print() + " : " + type.print()
         }
     }
 

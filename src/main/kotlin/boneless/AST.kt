@@ -3,6 +3,7 @@ package boneless
 typealias Identifier = String
 
 sealed class Type {
+    data class PrimitiveType(val primitiveType: boneless.PrimitiveType) : Type()
     data class TypeApplication(val name: String, val ops: List<Expression>) : Type() { lateinit var resolved: BoundIdentifier }
     data class RecordType(val elements: List<Pair<Identifier, Type>>) : Type()
     data class TupleType(val elements: List<Type>) : Type() {
@@ -43,7 +44,7 @@ sealed class Pattern {
     data class ListPattern(val list: List<Pattern>): Pattern()
     data class DictPattern(val dict: Map<Identifier, Pattern>): Pattern()
     data class CtorPattern(val target: Identifier, val args: List<Pattern>): Pattern() { lateinit var resolved: BoundIdentifier }
-    data class TypeAnnotatedPattern(val inside: Pattern, val annotation: Type): Pattern()
+    data class TypeAnnotatedPattern(val inside: Pattern, val type: Type): Pattern()
 
     // Something is refutable (ie there are values of the type of the pattern that do not match the pattern)
     // as soon as it contains a literal.

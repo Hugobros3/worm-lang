@@ -100,6 +100,11 @@ class Parser(private val inputAsText: String, private val tokens: List<Tokenizer
         return id.payload!!
     }
 
+    private fun expectNumericalLiteral(): String {
+        val id = expect("NumLit")
+        return id.payload!!
+    }
+
     private fun eatIdentifier(): String {
         val id = eat("Identifier")
         return id.payload!!
@@ -128,8 +133,7 @@ class Parser(private val inputAsText: String, private val tokens: List<Tokenizer
                     if (accept(";")) {
                         instructions += Instruction.Evaluate(yieldValue)
                         yieldValue = null
-                    }
-                    else
+                    } else
                         break
                 }
             }
@@ -139,7 +143,7 @@ class Parser(private val inputAsText: String, private val tokens: List<Tokenizer
 
     private fun eatModule(): Module {
         val defs = mutableListOf<Def>()
-        while(accept("def")) {
+        while (accept("def")) {
             val identifier = expectIdentifier()
             val type = acceptTypeAnnotation()
             expect("::")
@@ -152,77 +156,83 @@ class Parser(private val inputAsText: String, private val tokens: List<Tokenizer
 
     private fun acceptTypeAnnotation(): Type? {
         if (accept(":")) {
-            return eatType()
+            return expectType()
         }
         return null
     }
 
-    fun eatType(insideBrackets: Boolean = false, insideTuple: Boolean = false): Type {
-        val un_normalized = if (accept("[")) {
-            if (accept("]"))
-                Type.TupleType(emptyList())
-            else {
-                val inside = eatType(insideBrackets = true)
-                eat("]")
-                inside
-            }
-        } else if (front.tokenName == "Identifier") {
-            val id = eatIdentifier()
-            if (insideBrackets && accept("::")) {
-                val type = eatType()
-                // Either a struct/enum type
-                if (front.tokenName == "|") {
-                    // Is an enum type
-                    val elements = mutableListOf(Pair(id, type))
-                    while (accept("|")) {
-                        val id2 = expectIdentifier()
-                        expect("::")
-                        val type2 = eatType()
-                        elements += Pair(id2, type2)
-                    }
-                    Type.EnumType(elements)
-                } else {
-                    val elements = mutableListOf(Pair(id, type))
-                    while (accept(",")) {
-                        val id2 = expectIdentifier()
-                        expect("::")
-                        val type2 = eatType()
-                        elements += Pair(id2, type2)
-                    }
-                    Type.RecordType(elements)
-                }
-            } else if (insideBrackets && accept("^")) {
-                // definite array
-                val type = Type.TypeApplication(id, emptyList())
-                val size = eat("NumLit").payload!!.toInt()
-                if (size == 0)
-                    throw Exception("Zero sized arrays are not supported")
-                Type.ArrayType(type, size)
-            } else if (insideBrackets && accept("..")) {
-                // indefinite array
-                val type = Type.TypeApplication(id, emptyList())
-                Type.ArrayType(type, -1)
-            } else if (front.tokenName == "*" && !insideTuple) {
-                // tuple type
-                val type = Type.TypeApplication(id, emptyList())
-                val elements = mutableListOf<Type>(type)
-                while (accept("*")) {
-                    elements += eatType(insideTuple = true)
-                }
-                Type.TupleType(elements)
-            } else {
-                // type application
-                val ops = mutableListOf<Expression>()
-                while (true) {
-                    val expr = acceptExpression(0) ?: break
-                    ops += expr
-                }
-                Type.TypeApplication(id, ops)
-            }
-        } else {
-            throw Exception("Not a type")
+    fun expectType(): Type {
+        val id = acceptIdentifier() ?: return eatTypeBrackets()
+
+        val prim_type = PrimitiveType.values().find { it.name == id }
+        if (prim_type != null)
+            return Type.PrimitiveType(prim_type)
+
+        val ops = mutableListOf<Expression>()
+        while (true) {
+            ops += acceptExpression(0) ?: break
         }
-        return un_normalized.normalize()
+
+        return Type.TypeApplication(id, ops)
+    }
+
+    fun eatTypeBrackets(): Type {
+        expect("[")
+        if (accept("]"))
+            return unit_type()
+
+        try {
+            val base = expectType()
+            when {
+                base is Type.TypeApplication && base.ops.isEmpty() && accept("::") -> {
+                    val elems = mutableListOf(Pair(base.name, expectType()))
+                    when (front.tokenName) {
+                        "," -> {
+                            while (accept(",")) {
+                                val id = expectIdentifier()
+                                expect("::")
+                                val type = expectType()
+                                elems += Pair(id, type)
+                            }
+                            return Type.RecordType(elems)
+                        }
+                        "|" -> {
+                            while (accept("|")) {
+                                val id = expectIdentifier()
+                                expect("::")
+                                val type = expectType()
+                                elems += Pair(id, type)
+                            }
+                            return Type.EnumType(elems)
+                        }
+                        else -> {
+                            expected("',' or '|'")
+                        }
+                    }
+                }
+                front.tokenName == "," -> {
+                    val elems = mutableListOf(base)
+                    while (accept(",")) {
+                        val type = expectType()
+                        elems += type
+                    }
+                    return Type.TupleType(elems)
+                }
+                accept("..") -> {
+                    return Type.ArrayType(base, 0)
+                }
+                accept("^") -> {
+                    val size = expectNumericalLiteral().toIntOrNull()
+                    if (size == null || size <= 0)
+                        expected("non-zero integer number")
+                    return Type.ArrayType(base, size)
+                }
+            }
+
+            return base
+        } finally {
+            expect("]")
+        }
     }
 
     // TODO maybe allow trailing ',' ?
@@ -298,10 +308,11 @@ class Parser(private val inputAsText: String, private val tokens: List<Tokenizer
             accept("(") -> {
                 return eatExpressionParenthesisInsides(")")
             }
-            accept("[") -> {
-                val type = eatType(insideBrackets = true)
+            front.tokenName == "[" -> {
+                //accept("[") -> {
+                val type = eatTypeBrackets()
                 val e = Expression.QuoteType(type)
-                eat("]")
+                //eat("]")
                 return e
             }
             accept("{") -> {
@@ -341,18 +352,21 @@ class Parser(private val inputAsText: String, private val tokens: List<Tokenizer
                     if (infix == InfixSymbol.Application) {
                         val following = acceptPrimaryExpression() ?: continue
                         accumulator = when (val oldfirst = accumulator) {
-                            is Expression.Invocation -> Expression.Invocation(oldfirst.target, oldfirst.args + listOf(following))
+                            is Expression.Invocation -> Expression.Invocation(
+                                oldfirst.target,
+                                oldfirst.args + listOf(following)
+                            )
                             else -> Expression.Invocation(accumulator, listOf(following))
                         }
                         continue@outerBinop
                     } else if (accept(infix.token.str)) {
                         when (infix) {
                             InfixSymbol.Ascription -> {
-                                val type = eatType()
+                                val type = expectType()
                                 accumulator = Expression.Ascription(accumulator, type)
                             }
                             InfixSymbol.Cast -> {
-                                val type = eatType()
+                                val type = expectType()
                                 accumulator = Expression.Cast(accumulator, type)
                             }
                             else -> {
@@ -418,7 +432,7 @@ class Parser(private val inputAsText: String, private val tokens: List<Tokenizer
         }
     }
 
-    private fun eatPatternBasic(): Pattern = when {
+    private fun acceptPatternBasic(): Pattern? = when {
         front.tokenName == "StringLit" -> {
             val nom = eat(); Pattern.Literal(Value.StrLiteral(nom.payload!!)); }
         front.tokenName == "NumLit" -> {
@@ -431,13 +445,22 @@ class Parser(private val inputAsText: String, private val tokens: List<Tokenizer
             eatPatternParenthesisInsides(")")
         }
 
-        else -> expected("literal or list or dictionary or ctor pattern")
+        else -> null
     }
 
     private fun eatPattern(): Pattern {
-        val pattern = eatPatternBasic()
+        val pattern = acceptPatternBasic() ?: expected("literal or list or dictionary or ctor pattern")
+        if (pattern is Pattern.Binder) {
+            val args = mutableListOf<Pattern>()
+            while (true) {
+                val arg = acceptPatternBasic() ?: break
+                args += arg
+            }
+            if (args.isNotEmpty())
+                return Pattern.CtorPattern(pattern.id, args)
+        }
         if (accept(":")) {
-            val typeAnnotation = eatType(false)
+            val typeAnnotation = expectType()
             return Pattern.TypeAnnotatedPattern(pattern, typeAnnotation)
         }
         return pattern

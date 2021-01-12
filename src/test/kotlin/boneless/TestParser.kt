@@ -24,7 +24,7 @@ class TestParser {
 
     private fun testParseType(str: String) {
         val p = Parser(str, Tokenizer(str).tokenize())
-        val t = p.eatType()
+        val t = p.expectType()
 
         println("Parsed type as: $t")
         println("Printed form: " + t.prettyPrint())
@@ -109,27 +109,28 @@ class TestParser {
             """.trimIndent())
 
         testModule("""
-                def deref_s_ptr :: fn s: ref [I32 * I32] => @s;
+                def deref_s_ptr :: fn s: ref [I32, I32] => @s;
             """.trimIndent())
     }
 
     @Test
     fun testTypeParser() {
-        testParseType("i32")
+        testParseType("I32")
         testParseType("[]")
-        testParseType("[i32]")
-        testParseType("[x :: i32, y :: i32]")
-        testParseType("[x :: i32, y :: i32, z :: i32]")
-        testParseType("[left :: f32 | right :: i32]")
-        testParseType("[left :: f32 | right :: i32 | center :: []]")
-        testParseType("[i32 * i32 * i32]")
-        testParseType("i32 * i32 * i32")
-        testParseType("[i32 * i32 * f32]")
+        testParseType("[I32]")
+        testParseType("[x :: I32, y :: I32]")
+        testParseType("[x :: I32, y :: I32, z :: I32]")
+        testParseType("[left :: f32 | right :: I32]")
+        testParseType("[left :: f32 | right :: I32 | center :: []]")
+        testParseType("[I32, I32, I32]")
+        testParseType("[I32, I32, f32]")
+        testParseType("[[I32, I32], f32]")
+        testParseType("[[I32, I32], [], f32]")
         testParseType("[f32..]")
         testParseType("[f32^6]")
-        testParseType("[Option [i32]]")
-        testParseType("Option [i32]")
-        testParseType("[i32^1]")
+        testParseType("[Option [I32]]")
+        testParseType("Option [I32]")
+        testParseType("[I32^1]")
     }
 
     @Test
@@ -155,23 +156,23 @@ class TestParser {
         """.trimIndent())
 
         testParseSeq("""
-            let x: [i32^2] = (one = 1, two = 2);
+            let x: [I32^2] = (one = 1, two = 2);
         """.trimIndent())
 
         expectFailure {
             testParseSeq("""
-            let x: [i32^2] = (one = 1, one = 2);
+            let x: [I32^2] = (one = 1, one = 2);
         """.trimIndent())
         }
     }
     @Test
     fun testCast() {
         testParseSeq("""
-            let x = (1, 2, 3, 4, 5) as [i32^5];
+            let x = (1, 2, 3, 4, 5) as [I32^5];
         """.trimIndent())
 
         testParseSeq("""
-            let x: [i32^5] = (1, 2, 3, 4, 5);
+            let x: [I32^5] = (1, 2, 3, 4, 5);
         """.trimIndent())
     }
 

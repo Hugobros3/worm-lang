@@ -46,19 +46,21 @@ class BindHelper(private val module: Module) {
         bind(def.body)
     }
 
-    fun bind(i: Instruction) {
-        when (i) {
+    fun bind(inst: Instruction) {
+        when (inst) {
             is Instruction.Let -> {
-                bind(i.body)
-                this[i.identifier] = BoundIdentifier.ToLet(i)
+                bind(inst.body)
+                this[inst.identifier] = BoundIdentifier.ToLet(inst)
             }
-            is Instruction.Evaluate -> bind(i.e)
+            is Instruction.Evaluate -> bind(inst.e)
+            else -> throw Exception("Unhandled ast node $inst")
         }
     }
 
     fun bind(expr: Expression) {
         when (expr) {
-            is Expression.QuoteValue, is Expression.QuoteType -> {}
+            is Expression.QuoteValue -> {}
+            is Expression.QuoteType -> bind(expr.type)
 
             is Expression.Cast -> { bind(expr.e); bind(expr.type) }
             is Expression.Ascription -> { bind(expr.e); bind(expr.type) }
@@ -93,6 +95,7 @@ class BindHelper(private val module: Module) {
             is Expression.IdentifierRef -> {
                 expr.resolved = this[expr.id]
             }
+            else -> throw Exception("Unhandled ast node $expr")
         }
     }
 
@@ -106,6 +109,8 @@ class BindHelper(private val module: Module) {
                 type.resolved = this[type.name]
                 type.ops.forEach(::bind)
             }
+            is Type.PrimitiveType -> {}
+            else -> throw Exception("Unhandled ast node $type")
         }
     }
 
@@ -121,6 +126,11 @@ class BindHelper(private val module: Module) {
                 pattern.resolved = this[pattern.target]
                 pattern.args.forEach(::bind)
             }
+            is Pattern.TypeAnnotatedPattern -> {
+                bind(pattern.inside)
+                bind(pattern.type)
+            }
+            else -> throw Exception("Unhandled ast node $pattern")
         }
     }
 
