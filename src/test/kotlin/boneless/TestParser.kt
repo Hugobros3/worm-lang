@@ -101,7 +101,7 @@ class TestParser {
             """.trimIndent())
 
         testModule("""
-                def operations :: fn a, b, c, d => {
+                def operations :: fn (a, b, c, d) => {
                     let x = a ^ b;
                     let y = !x | c;
                     let z = !!(x ^ c ^ d ^ y);
@@ -173,5 +173,20 @@ class TestParser {
         testParseSeq("""
             let x: [i32^5] = (1, 2, 3, 4, 5);
         """.trimIndent())
+    }
+
+    @Test
+    fun testPattern() {
+        testModule("""
+            def f1 :: fn x => x;
+            def f2 :: fn (x) => x;
+            def f3 :: fn (x, y) => x;
+        """.trimIndent())
+
+        expectFailure {
+            testModule("""
+                def f1 :: fn (x, 0) => x;
+            """.trimIndent())
+        }
     }
 }

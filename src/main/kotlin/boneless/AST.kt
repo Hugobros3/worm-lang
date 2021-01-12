@@ -15,30 +15,6 @@ sealed class Type {
     data class EnumType(val elements: List<Pair<Identifier, Type>>) : Type()
 }
 
-fun Type.normalize(): Type = when {
-    // tuples of size 1 do not exist
-    this is Type.TupleType && elements.size == 1 -> elements[0]
-    // definite arrays of size 1 do not exist
-    // this is Type.ArrayType && size == 1 -> elementType
-    else -> this
-}
-
-fun isSubtype(T: Type, S: Type): Boolean {
-    return when {
-        // A definite array is a subtype of a tuple type iff that tuple type is not unit, and it has the same data layout as the definite array
-        T is Type.ArrayType && S is Type.TupleType && T.isDefinite && T.size == S.elements.size && S.elements.all { it == T.elementType } -> true
-        // And vice versa
-        T is Type.TupleType && S is Type.ArrayType && S.isDefinite && S.size == T.elements.size && T.elements.all { it == S.elementType } -> true
-
-        // A struct type T is a subtype of a nameless subtype S if they contain the same things, in the same order
-        T is Type.RecordType && S is Type.TupleType && T.elements.map { it.second } == S.elements -> true
-
-        // A record type T is a subtype of another record type S iff the elements in T are a superset of the elements in S
-        T is Type.RecordType && S is Type.RecordType && T.elements.containsAll(S.elements) -> true
-        else -> false
-    }
-}
-
 data class Module(val defs: Set<Def>)
 data class Def(val identifier: Identifier, val parameters: List<DefParameter>, val type: Type?, val body: Expression) {
     data class DefParameter(val identifier: Identifier)
@@ -57,6 +33,29 @@ sealed class Value {
     // These can't really be parsed in expressions (the parser has no way of knowing if all the parameters are constant)
     data class ListLiteral(val list: List<Value>): Value()
     data class DictionaryLiteral(val dict: Map<Identifier, Value>): Value()
+
+    val isUnit: Boolean get() = this is ListLiteral && this.list.isEmpty()
+}
+
+sealed class Pattern {
+    data class Binder(val id: Identifier): Pattern()
+    data class Literal(val value: Value): Pattern()
+    data class ListPattern(val list: List<Pattern>): Pattern()
+    data class DictPattern(val dict: Map<Identifier, Pattern>): Pattern()
+    data class CtorPattern(val target: Identifier, val args: List<Pattern>): Pattern() { lateinit var resolved: BoundIdentifier }
+    data class TypeAnnotatedPattern(val inside: Pattern, val annotation: Type): Pattern()
+
+    // Something is refutable (ie there are values of the type of the pattern that do not match the pattern)
+    // as soon as it contains a literal.
+    val isRefutable: Boolean
+        get() = when(this) {
+            is Binder -> false
+            is Literal -> !value.isUnit // the unit literal is not a refutable pattern
+            is ListPattern -> list.any { it.isRefutable }
+            is DictPattern -> dict.values.any { it.isRefutable }
+            is CtorPattern -> args.any { it.isRefutable }
+            is TypeAnnotatedPattern -> false
+        }
 }
 
 sealed class Expression {
@@ -68,8 +67,8 @@ sealed class Expression {
     data class ListExpression(val list: List<Expression>) : Expression()
     data class DictionaryExpression(val dict: Map<Identifier, Expression>) : Expression()
 
-    data class Invocation(val args: List<Expression>) : Expression()
-    data class Function(val parameters: List<Pair<Identifier, Expression>>, val body: Expression) : Expression()
+    data class Invocation(val target: Expression, val args: List<Expression>) : Expression()
+    data class Function(val parameters: Pattern, val body: Expression) : Expression()
 
     data class Ascription(val e: Expression, val type: Type) : Expression()
     data class Cast(val e: Expression, val type: Type) : Expression()

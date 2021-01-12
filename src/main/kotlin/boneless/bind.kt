@@ -3,16 +3,16 @@ package boneless
 sealed class BoundIdentifier {
     data class ToDef(val def: Def) : BoundIdentifier()
     data class ToLet(val let: Instruction.Let) : BoundIdentifier()
-    data class ToFnParam(val fn: Expression.Function, val param: Int) : BoundIdentifier()
+    data class ToPatternBinder(val binder: Pattern.Binder) : BoundIdentifier()
 }
 
 fun bind(module: Module) {
     for (def in module.defs) {
-        Binder(module).bind(def)
+        BindHelper(module).bind(def)
     }
 }
 
-class Binder(private val module: Module) {
+class BindHelper(private val module: Module) {
     private val scopes = mutableListOf<MutableList<Pair<Identifier, BoundIdentifier>>>()
 
     fun push() = scopes.add(0, mutableListOf())
@@ -78,8 +78,7 @@ class Binder(private val module: Module) {
             }
             is Expression.Function -> {
                 push()
-                for ((i, param) in expr.parameters.withIndex())
-                    this[param.first] = BoundIdentifier.ToFnParam(expr, i)
+                bind(expr.parameters)
                 bind(expr.body)
                 pop()
             }
@@ -99,14 +98,29 @@ class Binder(private val module: Module) {
 
     fun bind(type: Type) {
         when(type) {
-            is Type.TypeApplication -> {
-                type.resolved = this[type.name]
-                type.ops.forEach(::bind)
-            }
             is Type.RecordType -> { type.elements.forEach { bind(it.second) } }
             is Type.EnumType -> { type.elements.forEach { bind(it.second) } }
             is Type.TupleType -> { type.elements.forEach(::bind) }
             is Type.ArrayType -> bind(type.elementType)
+            is Type.TypeApplication -> {
+                type.resolved = this[type.name]
+                type.ops.forEach(::bind)
+            }
+        }
+    }
+
+    fun bind(pattern: Pattern) {
+        when(pattern) {
+            is Pattern.Binder -> {
+                this[pattern.id] = BoundIdentifier.ToPatternBinder(pattern)
+            }
+            is Pattern.Literal -> {}
+            is Pattern.ListPattern -> pattern.list.forEach(::bind)
+            is Pattern.DictPattern -> pattern.dict.values.forEach(::bind)
+            is Pattern.CtorPattern -> {
+                pattern.resolved = this[pattern.target]
+                pattern.args.forEach(::bind)
+            }
         }
     }
 

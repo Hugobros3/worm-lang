@@ -31,9 +31,10 @@ enum class InfixSymbol(val token: Keyword, val priority: Int, val rewrite: Strin
 
 class Parser(private val inputAsText: String, private val tokens: List<Tokenizer.Token>) {
     private var i = 0
-    private val stack = mutableListOf<Int>()
-    fun push() { stack.add(0, i) }
-    fun pop() { i = stack.removeAt(0) }
+    // no speculative parsing yay :)
+    //private val stack = mutableListOf<Int>()
+    //fun push() { stack.add(0, i) }
+    //fun pop() { i = stack.removeAt(0) }
 
     private fun unexpectedToken(expected: String? = null): Nothing {
         throw Exception("Unexpected token '${front.tokenName}' at $here" + (expected?.let { ", expected $it" } ?: ""))
@@ -44,19 +45,17 @@ class Parser(private val inputAsText: String, private val tokens: List<Tokenizer
     }
 
     private fun expected(expected: String): Nothing {
-        throw Exception("Expected $expected at $here but got $front")
+        throw Exception("Expected $expected at $here")
     }
 
     //private val pos: Tokenizer.Pos
     //    get() = front.pos
 
     private val here: String
-        get() = "${front.pos}, starting with \"${
-            inputAsText.substring(
-                front.pos.absolute,
-                Math.min(inputAsText.length, front.pos.absolute + 10)
-            )
-        }...\""
+        get() = front.pos.toString() + ", before \"" + inputAsText.substring(
+            front.pos.absolute,
+            Math.min(inputAsText.length, front.pos.absolute + 10)
+        ) + if (front.pos.absolute + 10 < inputAsText.length) "...\"" else "\""
 
     private val front: Tokenizer.Token
         get() = tokens[i]
@@ -227,7 +226,7 @@ class Parser(private val inputAsText: String, private val tokens: List<Tokenizer
     }
 
     // TODO maybe allow trailing ',' ?
-    private fun eatParenthesisInsides(endToken: String): Expression {
+    private fun eatExpressionParenthesisInsides(endToken: String): Expression {
         // This is the empty tuple
         if (accept(endToken))
             return Expression.QuoteValue(Value.ListLiteral(emptyList()))
@@ -287,15 +286,17 @@ class Parser(private val inputAsText: String, private val tokens: List<Tokenizer
                 return Expression.Conditional(condition, ifTrue, ifFalse)
             }
             accept("fn") -> {
-                val lhs = eatParenthesisInsides("=>")
+                //val lhs = eatExpressionParenthesisInsides("=>")
+                val lhs = eatPattern()
+                eat("=>")
                 val rhs = expectExpression(0)
                 return when {
-                    lhs.canBePattern() -> Expression.Function(listOf(lhs), rhs)
-                    else -> expected("Expected operands before =>")
+                    !lhs.isRefutable -> Expression.Function(lhs, rhs)
+                    else -> expected("Expected non-refutable pattern")
                 }
             }
             accept("(") -> {
-                return eatParenthesisInsides(")")
+                return eatExpressionParenthesisInsides(")")
             }
             accept("[") -> {
                 val type = eatType(insideBrackets = true)
@@ -318,28 +319,14 @@ class Parser(private val inputAsText: String, private val tokens: List<Tokenizer
             //    continue
             if (accept(prefix.token.str)) {
                 return Expression.Invocation(
+                    Expression.IdentifierRef(prefix.rewrite),
                     listOf(
-                        Expression.IdentifierRef(prefix.rewrite),
                         acceptPrefixedPrimaryExpr()!!
                     )
                 )
             }
         }
         return acceptPrimaryExpression()
-    }
-
-    private fun Expression.canBePattern() = when (this) {
-        is Expression.QuoteValue -> true
-        is Expression.QuoteType -> true
-        is Expression.IdentifierRef -> true
-        is Expression.ListExpression -> true
-        is Expression.DictionaryExpression -> true
-        is Expression.Invocation -> true // TODO this is only if you invoke a data ctor !
-        is Expression.Function -> false
-        is Expression.Ascription -> true
-        is Expression.Cast -> false
-        is Expression.Sequence -> false
-        is Expression.Conditional -> false
     }
 
     private fun expectExpression(priority: Int) = acceptExpression(priority) ?: expected("expression")
@@ -354,8 +341,8 @@ class Parser(private val inputAsText: String, private val tokens: List<Tokenizer
                     if (infix == InfixSymbol.Application) {
                         val following = acceptPrimaryExpression() ?: continue
                         accumulator = when (val oldfirst = accumulator) {
-                            is Expression.Invocation -> Expression.Invocation(oldfirst.args + listOf(following))
-                            else -> Expression.Invocation(listOf(accumulator, following))
+                            is Expression.Invocation -> Expression.Invocation(oldfirst.target, oldfirst.args + listOf(following))
+                            else -> Expression.Invocation(accumulator, listOf(following))
                         }
                         continue@outerBinop
                     } else if (accept(infix.token.str)) {
@@ -371,8 +358,8 @@ class Parser(private val inputAsText: String, private val tokens: List<Tokenizer
                             else -> {
                                 val rhs = expectExpression(infix.priority)
                                 accumulator = Expression.Invocation(
+                                    Expression.IdentifierRef(infix.rewrite!!),
                                     listOf(
-                                        Expression.IdentifierRef(infix.rewrite!!),
                                         accumulator,
                                         rhs
                                     )
@@ -387,6 +374,73 @@ class Parser(private val inputAsText: String, private val tokens: List<Tokenizer
         }
 
         return accumulator
+    }
+
+    // TODO maybe allow trailing ',' ?
+    private fun eatPatternParenthesisInsides(endToken: String): Pattern {
+        // This is the empty tuple
+        if (accept(endToken))
+            return Pattern.Literal(Value.ListLiteral(emptyList()))
+
+        val firstExpression = eatPattern()
+        if (firstExpression is Pattern.Binder && accept("=")) {
+            val firstId = firstExpression.id
+            // this is a dictionary !
+            val dict = mutableMapOf(firstId to eatPattern())
+            while (true) {
+                if (accept(endToken)) {
+                    return Pattern.DictPattern(dict)
+                } else {
+                    expect(",")
+                    val id = expectIdentifier()
+                    expect("=")
+                    val expr = eatPattern()
+                    if (dict.contains(id))
+                        throw Exception("identifier $id given two values $here")
+                    dict[id] = expr
+                }
+            }
+        } else {
+            if (accept(endToken)) {
+                return firstExpression // This was just a parenthesized expression...
+            } else {
+                // Otherwise it must be a list !
+                val tuple = mutableListOf<Pattern>()
+                tuple += firstExpression
+                while (true) {
+                    if (accept(endToken)) {
+                        return Pattern.ListPattern(tuple)
+                    }
+                    expect(",")
+                    tuple += eatPattern()
+                }
+            }
+        }
+    }
+
+    private fun eatPatternBasic(): Pattern = when {
+        front.tokenName == "StringLit" -> {
+            val nom = eat(); Pattern.Literal(Value.StrLiteral(nom.payload!!)); }
+        front.tokenName == "NumLit" -> {
+            val nom = eat(); Pattern.Literal(Value.NumLiteral(nom.payload!!)); }
+        front.tokenName == "Identifier" -> {
+            val id = eatIdentifier()
+            Pattern.Binder(id)
+        }
+        accept("(") -> {
+            eatPatternParenthesisInsides(")")
+        }
+
+        else -> expected("literal or list or dictionary or ctor pattern")
+    }
+
+    private fun eatPattern(): Pattern {
+        val pattern = eatPatternBasic()
+        if (accept(":")) {
+            val typeAnnotation = eatType(false)
+            return Pattern.TypeAnnotatedPattern(pattern, typeAnnotation)
+        }
+        return pattern
     }
 
     fun parseModule(): Module {
