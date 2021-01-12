@@ -1,5 +1,10 @@
 package boneless
 
+fun Module.prettyPrint(): String {
+    val t = this
+    return PrettyPrinter().run { t.print() }
+}
+
 fun Expression.prettyPrint(): String {
     val t = this
     return PrettyPrinter().run { t.print() }
@@ -11,10 +16,13 @@ fun Type.prettyPrint(): String {
 }
 
 private class PrettyPrinter(val resugarizePrefixAndInfixSymbols: Boolean = true) {
+    fun Module.print() = defs.joinToString("\n") { it.print() }
+    fun Def.print() = "def $identifier" + type.printTypeAnnotation() + " :: " + body.print() + ";"
+
     private fun Instruction.print() = when (this) {
-        is Instruction.Def -> "def $identifier" + type.printTypeAnnotation() + " :: " + body.print() + ";"
         is Instruction.Let -> "let $identifier" + type.printTypeAnnotation() + " = " + body.print() + ";"
-        is Instruction.Var -> "var $identifier" + type.printTypeAnnotation() + if (defaultValue != null) " = ${defaultValue.print()}" else "" + ";"
+        is Instruction.Evaluate -> e.prettyPrint() + ";"
+        //is Instruction.Var -> "var $identifier" + type.printTypeAnnotation() + if (defaultValue != null) " = ${defaultValue.print()}" else "" + ";"
     }
 
     private fun Type?.printTypeAnnotation(): String = this?.let { ": " + it.print() } ?: ""
@@ -34,25 +42,25 @@ private class PrettyPrinter(val resugarizePrefixAndInfixSymbols: Boolean = true)
             null -> ""
             is Expression.QuoteValue -> value.print(firstOperand)
             is Expression.QuoteType -> "[" + type.print() + "]"
-            is Expression.RefSymbol -> symbol
+            is Expression.IdentifierRef -> id
             is Expression.Invocation -> {
-                val callee = arguments[0]
-                if (resugarizePrefixAndInfixSymbols && callee is Expression.RefSymbol) {
-                    val prefix = PrefixSymbol.values().find { it.rewrite == callee.symbol }
-                    val infix = InfixSymbol.values().find { it.rewrite == callee.symbol }
-                    if (prefix != null && arguments.size == 2) {
-                        return prefix.token.str + arguments[1].print(9999)
-                    } else if (infix != null && arguments.size == 3) {
+                val callee = args[0]
+                if (resugarizePrefixAndInfixSymbols && callee is Expression.IdentifierRef) {
+                    val prefix = PrefixSymbol.values().find { it.rewrite == callee.id }
+                    val infix = InfixSymbol.values().find { it.rewrite == callee.id }
+                    if (prefix != null && args.size == 2) {
+                        return prefix.token.str + args[1].print(9999)
+                    } else if (infix != null && args.size == 3) {
                         p = infix.priority
-                        return open() + arguments[1].print(p) + " ${infix.token.str} " + arguments[2].print(p) + close()
+                        return open() + args[1].print(p) + " ${infix.token.str} " + args[2].print(p) + close()
                     }
                 }
                 p = InfixSymbol.Application.priority
-                open() + arguments.mapIndexed { i, it -> it.print(p, i == 0) }
+                open() + args.mapIndexed { i, it -> it.print(p, i == 0) }
                     .joinToString(" ") + close()
             }
-            is Expression.ListExpression -> "(" + elements.joinToString(", ") { it.print() } + ")"
-            is Expression.DictionaryExpression -> "(" + elements.map { (id, e) -> "$id = ${e.print()}" }.joinToString(", ") + ")"
+            is Expression.ListExpression -> "(" + list.joinToString(", ") { it.print() } + ")"
+            is Expression.DictionaryExpression -> "(" + dict.map { (id, e) -> "$id = ${e.print()}" }.joinToString(", ") + ")"
             is Expression.Sequence -> "{\n" + instructions.joinToString("") { shift(it.print()) + "\n" } + if (yieldValue != null) (shift(
                 yieldValue.print(0)
             ) + "\n") else "" + "}"
@@ -64,6 +72,10 @@ private class PrettyPrinter(val resugarizePrefixAndInfixSymbols: Boolean = true)
             is Expression.Ascription -> {
                 p = InfixSymbol.Ascription.priority
                 open() + e.print(p, firstOperand) + " : " + type.print() + close()
+            }
+            is Expression.Cast -> {
+                p = InfixSymbol.Cast.priority
+                open() + e.print(p, firstOperand) + " as " + type.print() + close()
             }
         }
     }

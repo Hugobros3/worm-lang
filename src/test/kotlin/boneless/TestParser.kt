@@ -5,53 +5,65 @@ import org.junit.Test
 
 class TestParser {
 
-    private fun testParse(str: String) {
-        val p = Parser(str, Tokenizer(str).tokenize())
-        val pp = p.parseProgram()
-        //println(pp)
-        println(pp.prettyPrint())
+    private fun testModule(str: String) {
+        val parser = Parser(str, Tokenizer(str).tokenize())
+        val program = parser.parseModule()
+        val printedProgram = program.prettyPrint()
+        println(printedProgram)
 
-        val printed = pp.prettyPrint()
-        val againParser = Parser(printed, Tokenizer(printed).tokenize())
-        val reparsed = againParser.parseProgram()
-        //println(reparsed.yieldValue)
-        //println(reparsed.yieldValue!!.prettyPrint())
-        assertTrue(pp == reparsed.yieldValue)
+        val parser2 = Parser(printedProgram, Tokenizer(printedProgram).tokenize())
+        val program2 = parser2.parseModule()
+        assertTrue(program == program2)
+    }
+
+    private fun testParseSeq(str: String) {
+        val parser = Parser(str, Tokenizer(str).tokenize())
+        val seq = parser.parseSequenceContents()
+        println(seq.prettyPrint())
     }
 
     private fun testParseType(str: String) {
         val p = Parser(str, Tokenizer(str).tokenize())
         val t = p.eatType()
 
-        println(t)
-        println(t.prettyPrint())
+        println("Parsed type as: $t")
+        println("Printed form: " + t.prettyPrint())
+    }
+
+    private fun expectFailure(f: () -> Unit) {
+        try {
+            f()
+            assertTrue(false)
+        } catch (e: Exception) {
+            println("Fails as expected: $e")
+        }
     }
 
     @Test
     fun testParse() {
 
-        testParse("let x = 56;")
+        testParseSeq("let x = 56;")
 
-        testParse("""
+        testParseSeq("""
                 let x = 56;
                 let y = (x, 9);
             """.trimIndent())
 
-        testParse("""
+        testModule("""
                 def PersonIdentity :: [
                     fullName :: String,
                     dob :: Date
                 ];
             """.trimIndent())
 
-        testParse("""
+        testModule("""
                 def x: String :: "a";
                 def xx :: "a"; // TS will infer String 
             """.trimIndent())
 
-        testParse("""
-                /* block comment */ let a = 666;
-                
+        testModule("""
+                /* block comment */
+                def a :: 666;
                 /*
                  * more complicated 
                  * /* block comment */ 
@@ -59,12 +71,12 @@ class TestParser {
                 */
             """.trimIndent())
 
-        testParse("""
+        testModule("""
                 def pair :: fn a => (a, a);
                 def factorial :: fn (number: I32) => if number <= 1 then 1 else factorial (number - 1);
             """.trimIndent())
 
-        testParse("""
+        testParseSeq("""
                 let x = 5 * 4 + 3;
                 let y = 5 + 4 * 3;
                 
@@ -79,16 +91,16 @@ class TestParser {
                 let b = 5 * -4 : A;
             """.trimIndent())
 
-        testParse("""
+        testParseSeq("""
                 let s = map (fn (x, y, z) => x + y + z) arr;
             """.trimIndent())
 
-        testParse("""
+        testParseSeq("""
                 let x = sum 2 (2 * reverse);
                 let y = 3 * 3 francis;
             """.trimIndent())
 
-        testParse("""
+        testModule("""
                 def operations :: fn a, b, c, d => {
                     let x = a ^ b;
                     let y = !x | c;
@@ -96,7 +108,7 @@ class TestParser {
                 };
             """.trimIndent())
 
-        testParse("""
+        testModule("""
                 def deref_s_ptr :: fn s: ref [I32 * I32] => @s;
             """.trimIndent())
     }
@@ -122,28 +134,44 @@ class TestParser {
 
     @Test
     fun testParseAggregates() {
-        testParse("""
+        testParseSeq("""
             let x = ();
         """.trimIndent())
 
-        testParse("""
+        testParseSeq("""
             let x = (1);
         """.trimIndent())
 
-        testParse("""
+        testParseSeq("""
             let x = (1, 2);
         """.trimIndent())
 
-        testParse("""
+        testParseSeq("""
             let x = (one = 1);
         """.trimIndent())
 
-        testParse("""
+        testParseSeq("""
             let x = (one = 1, two = 2);
         """.trimIndent())
 
-        testParse("""
+        testParseSeq("""
             let x: [i32^2] = (one = 1, two = 2);
+        """.trimIndent())
+
+        expectFailure {
+            testParseSeq("""
+            let x: [i32^2] = (one = 1, one = 2);
+        """.trimIndent())
+        }
+    }
+    @Test
+    fun testCast() {
+        testParseSeq("""
+            let x = (1, 2, 3, 4, 5) as [i32^5];
+        """.trimIndent())
+
+        testParseSeq("""
+            let x: [i32^5] = (1, 2, 3, 4, 5);
         """.trimIndent())
     }
 }

@@ -1,0 +1,4 @@
+package boneless
+
+class ModuleType {
+}

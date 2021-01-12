@@ -3,15 +3,12 @@ package boneless
 typealias Identifier = String
 
 sealed class Type {
-    data class TypeApplication(val name: String, val ops: List<Expression>) : Type()
+    data class TypeApplication(val name: String, val ops: List<Expression>) : Type() { lateinit var resolved: BoundIdentifier }
     data class RecordType(val elements: List<Pair<Identifier, Type>>) : Type()
     data class TupleType(val elements: List<Type>) : Type() {
         val isUnit: Boolean get() = elements.isEmpty()
         val canBeDefiniteArray: Boolean get() = !isUnit && elements.all { it == elements[0] }
     }
-    /*{
-        val isStruct: Boolean get() = names != null
-    }*/
     data class ArrayType(val elementType: Type, val size: Int) : Type() {
         val isDefinite: Boolean get() = size != 0
     }
@@ -21,13 +18,8 @@ sealed class Type {
 fun Type.normalize(): Type = when {
     // tuples of size 1 do not exist
     this is Type.TupleType && elements.size == 1 -> elements[0]
-
-    // todo make those part of the subtyping relation instead
-    // tuples of identical elements are normalized into definite arrays
-    //this is Type.TupleType && shouldBeDefiniteArray -> Type.ArrayType(elements[0], elements.size)
-
     // definite arrays of size 1 do not exist
-    //this is Type.ArrayType && size == 1 -> elementType
+    // this is Type.ArrayType && size == 1 -> elementType
     else -> this
 }
 
@@ -47,12 +39,15 @@ fun isSubtype(T: Type, S: Type): Boolean {
     }
 }
 
+data class Module(val defs: Set<Def>)
+data class Def(val identifier: Identifier, val parameters: List<DefParameter>, val type: Type?, val body: Expression) {
+    data class DefParameter(val identifier: Identifier)
+}
+
 sealed class Instruction {
-    data class Def(val identifier: Identifier, val parameters: List<DefParameter>, val type: Type?, val body: Expression) : Instruction() {
-        data class DefParameter(val identifier: Identifier)
-    }
     data class Let(val identifier: Identifier, val isMutable: Boolean, val type: Type?, val body: Expression) : Instruction()
-    data class Var(val identifier: Identifier, val type: Type?, val defaultValue: Expression?) : Instruction()
+    data class Evaluate(val e: Expression) : Instruction()
+    //data class Var(val identifier: Identifier, val type: Type?, val defaultValue: Expression?) : Instruction()
 }
 
 sealed class Value {
@@ -65,20 +60,19 @@ sealed class Value {
 }
 
 sealed class Expression {
-    //object Unit : Expression()
     data class QuoteValue(val value: Value) : Expression()
     data class QuoteType(val type: Type) : Expression()
 
-    data class RefSymbol(val symbol: Identifier) : Expression()
+    data class IdentifierRef(val id: Identifier) : Expression() { lateinit var resolved: BoundIdentifier }
 
-    data class ListExpression(val elements: List<Expression>) : Expression()
-    data class DictionaryExpression(val elements: Map<Identifier, Expression>) : Expression()
+    data class ListExpression(val list: List<Expression>) : Expression()
+    data class DictionaryExpression(val dict: Map<Identifier, Expression>) : Expression()
 
-    data class Invocation(val arguments: List<Expression>) : Expression()
-    data class Function(val parameters: List<Expression>, val body: Expression) : Expression()
+    data class Invocation(val args: List<Expression>) : Expression()
+    data class Function(val parameters: List<Pair<Identifier, Expression>>, val body: Expression) : Expression()
 
     data class Ascription(val e: Expression, val type: Type) : Expression()
-    // data class Cast(val e: Expression, val type: Type) : Expression()
+    data class Cast(val e: Expression, val type: Type) : Expression()
 
     data class Sequence(val instructions: List<Instruction>, val yieldValue: Expression?) : Expression()
     data class Conditional(val condition: Expression, val ifTrue: Expression, val ifFalse: Expression) : Expression()
