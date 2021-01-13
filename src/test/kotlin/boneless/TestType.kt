@@ -16,36 +16,37 @@ class TestType {
     @Test
     fun testTypeBasic() {
         testType("""
-            def f1 :: 5;
-            def f2 :: ();
-            def f3 :: (1, 2, 3);
-            def f4 :: (x = 1, y = 2);
-            def f5 :: fn x: I32 => (x,x);
+            def f1 = 5;
+            def f2 = ();
+            def f3 = (1, 2, 3);
+            def f4 = (x = 1, y = 2);
+            def f5 = fn x: I32 => (x,x);
         """.trimIndent())
     }
 
     @Test
     fun testTypeData() {
         testType("""
-            def Empty :: data [];
-            def f1 :: fn Empty () => 0;
+            data Empty = [];
+            fn f1 Empty () => 0;
+            fn f2 (Empty ()) => 0;
             
-            def Pos :: data [I32, I32];
-            def g1 :: Pos (1, 98);
-            def g2 :: fn x: I32 => Pos (x, 98);
-            def g3 :: fn Pos(x, y) => y;
+            data Pos = [I32, I32];
+            def g1 = Pos (1, 98);
+            fn g2 x: I32 => Pos (x, 98);
+            fn g3 Pos(x, y) => y;
         """.trimIndent())
     }
 
     @Test
     fun testTypeAnnotation() {
         testType("""
-            def f1 : I32 :: 5;
+            def f1 : I32 = 5;
         """.trimIndent())
 
         expectFailure {
             testType("""
-                def f1 : [] :: 5;
+                def f1 : [] = 5;
             """.trimIndent())
         }
     }
@@ -57,11 +58,11 @@ class TestType {
         }
 
         testType("""
-            def pow2 :: fn (x: I32) => x * x;
+            fn pow2(x: I32) => x * x;
             
-            def Pos :: data [I32, I32];
-            def Square :: data [min :: Pos, max :: Pos];
-            def area :: fn Square(min = Pos (sx, sy), max = Pos (ex, ey)) => (ex - sx) * (ey - sy);
+            data Pos = [I32, I32];
+            data Rect = [min = Pos, max = Pos];
+            fn area Rect(min = Pos (sx, sy), max = Pos (ex, ey)) -> I32 = (ex - sx) * (ey - sy);
         """.trimIndent())
     }
 }

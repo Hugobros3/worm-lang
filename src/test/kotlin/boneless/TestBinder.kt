@@ -17,7 +17,7 @@ class TestBinder {
     fun testBinderBasic() {
         testBind(
             """
-            def foo :: {
+            def foo = {
                 let x = 56;
                 let y = (x, 9);
             };
@@ -28,21 +28,21 @@ class TestBinder {
     @Test
     fun testPattern() {
         testBind("""
-        def f1 :: fn x => x;
-        def f2 :: fn (x) => x;
-        def f3 :: fn (x, y) => x;
-        def f4 :: fn (first = a, second = b) => a + b;
-        def f5 :: fn () => 0;
-        def f6 :: fn EmptyCtor () => 0;
-        def f7 :: fn Pos2D (a, b) => b;
-        def f8 :: fn Vector (x = a, y = b, z = c) => a * b * c;
-        def f9 :: fn Rect ( Pos2D (x1, y1), Pos2D (x2, y2) ) => (x2 - x1) * (y2 - y1);
+        fn f1 x => x;
+        fn f2 (x) => x;
+        fn f3 (x, y) => x;
+        fn f4 (first = a, second = b) => a + b;
+        fn f5 () => 0;
+        fn f6 EmptyCtor () => 0;
+        fn f7 Pos2D (a, b) => b;
+        fn f8 Vector (x = a, y = b, z = c) => a * b * c;
+        fn f9 Rect ( Pos2D (x1, y1), Pos2D (x2, y2) ) => (x2 - x1) * (y2 - y1);
         
         // don't mind those
-        def EmptyCtor :: data [];
-        def Pos2D :: data [I32, I32];
-        def Vector :: data [x :: F32, y :: F32, z :: F32];
-        def Rect :: data [Pos2D, Pos2D];
+        data EmptyCtor = [];
+        data Pos2D = [I32, I32];
+        data Vector = [x = F32, y = F32, z = F32];
+        data Rect = [Pos2D, Pos2D];
         """.trimIndent())
     }
 }

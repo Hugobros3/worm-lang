@@ -27,7 +27,7 @@ enum class Keyword(val str: String) {
     Then("then"),
     Else("else"),
 
-    DefinitionSeparator("::"),
+    // DefinitionSeparator("::"),
     Range(".."),
     Map("=>"),
     Arrow("->"),

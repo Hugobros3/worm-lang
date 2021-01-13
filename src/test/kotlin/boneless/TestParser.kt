@@ -31,7 +31,7 @@ class TestParser {
     }
 
     @Test
-    fun testParse() {
+    fun testParseBasic() {
 
         testParseSeq("let x = 56;")
 
@@ -41,20 +41,20 @@ class TestParser {
             """.trimIndent())
 
         testModule("""
-                def PersonIdentity :: data [
-                    fullName :: String,
-                    dob :: Date
+                data PersonIdentity = [
+                    fullName = String,
+                    dob = Date
                 ];
             """.trimIndent())
 
         testModule("""
-                // def x: String :: "a";
-                def xx :: "a"; // TS will infer String 
+                def x: String = "a";
+                def xx = "a";
             """.trimIndent())
 
         testModule("""
                 /* block comment */
-                def a :: 666;
+                def a = 666;
                 /*
                  * more complicated 
                  * /* block comment */ 
@@ -63,8 +63,8 @@ class TestParser {
             """.trimIndent())
 
         testModule("""
-                def pair :: fn a => (a, a);
-                def factorial :: fn (number: I32) => if number <= 1 then 1 else factorial (number - 1);
+                fn pair a => (a, a);
+                fn factorial (number: I32) => if number <= 1 then 1 else factorial (number - 1);
             """.trimIndent())
 
         testParseSeq("""
@@ -92,7 +92,7 @@ class TestParser {
             """.trimIndent())
 
         testModule("""
-                def operations :: fn (a, b, c, d) => {
+                fn operations (a, b, c, d) => {
                     let x = a ^ b;
                     let y = !x | c;
                     let z = !!(x ^ c ^ d ^ y);
@@ -100,7 +100,7 @@ class TestParser {
             """.trimIndent())
 
         testModule("""
-                def deref_s_ptr :: fn s: ref [I32, I32] => @s;
+                fn deref_s_ptr s: ref [I32, I32] => @s;
             """.trimIndent())
     }
 
@@ -109,10 +109,10 @@ class TestParser {
         testParseType("I32")
         testParseType("[]")
         testParseType("[I32]")
-        testParseType("[x :: I32, y :: I32]")
-        testParseType("[x :: I32, y :: I32, z :: I32]")
-        testParseType("[left :: f32 | right :: I32]")
-        testParseType("[left :: f32 | right :: I32 | center :: []]")
+        testParseType("[x = I32, y = I32]")
+        testParseType("[x = I32, y = I32, z = I32]")
+        testParseType("[left = f32 | right = I32]")
+        testParseType("[left = f32 | right = I32 | center = []]")
         testParseType("[I32, I32, I32]")
         testParseType("[I32, I32, f32]")
         testParseType("[[I32, I32], f32]")
@@ -170,14 +170,14 @@ class TestParser {
     @Test
     fun testPattern() {
         testModule("""
-            def f1 :: fn x => x;
-            def f2 :: fn (x) => x;
-            def f3 :: fn (x, y) => x;
+            fn f1 x => x;
+            fn f2 (x) => x;
+            fn f3 (x, y) => x;
         """.trimIndent())
 
         expectFailure {
             testModule("""
-                def f1 :: fn (x, 0) => x;
+                fn f1 (x, 0) => x;
             """.trimIndent())
         }
     }

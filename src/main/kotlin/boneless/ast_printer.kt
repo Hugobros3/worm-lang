@@ -17,10 +17,16 @@ fun Type.prettyPrint(): String {
 
 private class PrettyPrinter(val resugarizePrefixAndInfixSymbols: Boolean = true) {
     fun Module.print() = defs.joinToString("\n") { it.print() }
-    fun Def.print() = "def $identifier" + type.printTypeAnnotation() + " :: " + when(body) {
-        is Def.DefBody.ExprBody -> body.expr.print(0)
-        is Def.DefBody.DataCtor -> "data " + body.type.print()
-        is Def.DefBody.TypeAlias -> "type " + body.type.print()
+    fun Def.print() = when(body) {
+        is Def.DefBody.ExprBody -> "def $identifier" + body.annotatedType.printTypeAnnotation() + " = " + body.expr.print(0)
+        is Def.DefBody.DataCtor -> "data " + identifier + " = " + body.type.print()
+        is Def.DefBody.TypeAlias -> "type " + identifier + " = " + body.type.print()
+        is Def.DefBody.FnBody -> "fn $identifier " + body.fn.run {
+            if (returnTypeAnnotation == null)
+                parameters.print() + " => " + body.print()
+            else
+                parameters.print() + " -> " + returnTypeAnnotation.print() + " = " + body.print()
+        }
     } + ";"
 
     private fun Instruction.print() = when (this) {
@@ -67,8 +73,10 @@ private class PrettyPrinter(val resugarizePrefixAndInfixSymbols: Boolean = true)
                 yieldValue.print(0)
             ) + "\n") else "" + "}"
             is Expression.Function -> {
-                //p = InfixSymbol.Map.priority
-                open() + "fn " + parameters.print() + " => " + body.print() + close()
+                if (returnTypeAnnotation == null)
+                    open() + "fn " + parameters.print() + " => " + body.print() + close()
+                else
+                    open() + "fn " + parameters.print() + " -> " + returnTypeAnnotation.print() + " = " + body.print() + close()
             }
             is Expression.Conditional -> "if " + condition.print() + " then " + ifTrue.print() + " else " + ifFalse.print()
             is Expression.Ascription -> {
@@ -89,11 +97,11 @@ private class PrettyPrinter(val resugarizePrefixAndInfixSymbols: Boolean = true)
         this is Type.TupleType && elements.isEmpty() -> "[]"
         this is Type.TupleType && elements.isNotEmpty() -> "[" + elements.joinToString(", ") { e -> e.print() } + "]"
 
-        this is Type.RecordType -> "[" + elements.joinToString(", ") { (name, type) -> name + "::" + type.print() } + "]"
+        this is Type.RecordType -> "[" + elements.joinToString(", ") { (name, type) -> name + "=" + type.print() } + "]"
 
         this is Type.ArrayType -> "[" + elementType.print() + (if (size == -1) ".." else "^$size") + "]"
 
-        this is Type.EnumType -> "[" + elements.joinToString(" | ") { (name, type) -> name + "::" + type.print() } + "]"
+        this is Type.EnumType -> "[" + elements.joinToString(" | ") { (name, type) -> name + "=" + type.print() } + "]"
         this is Type.FnType -> dom.print() + " -> " + codom.print()
         this is Type.NominalType -> name
         else -> throw Exception("Unprintable type")

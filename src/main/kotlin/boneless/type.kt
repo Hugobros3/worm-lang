@@ -99,7 +99,7 @@ class TypeChecker(val module: Module) {
 
     fun infer(node: Typeable): Type {
         node.type?.let { return (it) }
-        val inferred = when(node) {
+        val inferred = when (node) {
             is Def -> inferDef(node)
             is Value -> inferValue(node)
             is Expression -> inferExpr(node)
@@ -112,7 +112,7 @@ class TypeChecker(val module: Module) {
 
     fun check(node: Typeable, expected_type: Type): Type {
         node.type?.let { throw Exception("The type already exists!") }
-        val checked = when(node) {
+        val checked = when (node) {
             is Def -> checkDef(node, expected_type)
             is Value -> checkValue(node, expected_type)
             is Expression -> checkExpr(node, expected_type)
@@ -132,16 +132,17 @@ class TypeChecker(val module: Module) {
     fun inferDef(def: Def): Type {
         return when (val body = def.body) {
             is Def.DefBody.ExprBody -> {
-                if (def.annotatedType == null)
+                if (body.annotatedType == null)
                     infer(body.expr)
                 else
-                    check(body.expr, resolveType(def.annotatedType))
+                    check(body.expr, resolveType(body.annotatedType))
             }
             is Def.DefBody.DataCtor -> {
                 body.nominalType = Type.NominalType(def.identifier, resolveType(body.type))
                 Type.FnType(resolveType(body.type), body.nominalType, constructorFor = body.nominalType)
             }
             is Def.DefBody.TypeAlias -> body.type
+            is Def.DefBody.FnBody -> infer(body.fn)
         }
     }
 
@@ -186,7 +187,10 @@ class TypeChecker(val module: Module) {
             }
             is Expression.Function -> {
                 val dom = infer(expr.parameters)
-                val codom = infer(expr.body)
+                val codom = if (expr.returnTypeAnnotation == null)
+                    infer(expr.body)
+                else
+                    check(expr.body, resolveType(expr.returnTypeAnnotation))
                 Type.FnType(dom, codom)
             }
             is Expression.Ascription -> TODO()
@@ -287,7 +291,12 @@ class TypeChecker(val module: Module) {
                 if (expected_type !is Type.RecordType)
                     type_error("expected not-a-record")
                 if (pattern.fields.map { it.first } == expected_type.elements.map { it.first }) {
-                    val checked = pattern.fields.mapIndexed { i, pair -> Pair(pair.first, check(pair.second, expected_type.elements[i].second)) }
+                    val checked = pattern.fields.mapIndexed { i, pair ->
+                        Pair(
+                            pair.first,
+                            check(pair.second, expected_type.elements[i].second)
+                        )
+                    }
                     Type.RecordType(checked)
                 } else
                     type_error("records don't match exactly") // TODO: lol subype
@@ -310,7 +319,7 @@ class TypeChecker(val module: Module) {
     }
 
     fun inferTypeOfBinding(boundIdentifier: BoundIdentifier): Type? {
-        return when(boundIdentifier) {
+        return when (boundIdentifier) {
             is BoundIdentifier.ToDef -> if (boundIdentifier.def.is_type) null else infer(boundIdentifier.def)
             is BoundIdentifier.ToPatternBinder -> infer(boundIdentifier.binder)
             is BoundIdentifier.ToBuiltinFn -> boundIdentifier.fn.type
@@ -322,7 +331,7 @@ class TypeChecker(val module: Module) {
         is Type.TypeApplication -> {
             when (val resolved = type.callee.resolved) {
                 is BoundIdentifier.ToDef -> {
-                    when(resolved.def.body) {
+                    when (val body = resolved.def.body) {
                         is Def.DefBody.ExprBody -> type_error("${type.callee.identifier} does not name a type")
                         is Def.DefBody.DataCtor -> {
                             val defType = infer(resolved.def) as Type.FnType
@@ -331,6 +340,7 @@ class TypeChecker(val module: Module) {
                         is Def.DefBody.TypeAlias -> {
                             infer(resolved.def)
                         }
+                        is Def.DefBody.FnBody -> infer(resolved.def) as Type.FnType
                     }
                 }
                 else -> error("let & pattern binders are not supported in typing ... for now anyways")
@@ -347,7 +357,8 @@ class TypeChecker(val module: Module) {
 
     fun typeInstruction(inst: Instruction) {
         when (inst) {
-            is Instruction.Let -> {}
+            is Instruction.Let -> {
+            }
             is Instruction.Evaluate -> TODO()
         }
     }

@@ -143,19 +143,46 @@ class Parser(private val inputAsText: String, private val tokens: List<Tokenizer
 
     private fun expectModule(): Module {
         val defs = mutableListOf<Def>()
-        while (accept("def")) {
-            val identifier = expectIdentifier()
-            val annotatedType = acceptTypeAnnotation()
-            expect("::")
-
-            val body = when {
-                accept("data") -> { Def.DefBody.DataCtor(expectType()) }
-                accept("type") -> { Def.DefBody.TypeAlias(expectType()) }
-                else -> { Def.DefBody.ExprBody(acceptExpression(0) ?: unexpectedToken("expression")) }
-            }
-
-            expect(";")
-            defs += Def(identifier, emptyList(), annotatedType, body)
+        while (true) {
+            if (accept("data")) {
+                val identifier = expectIdentifier()
+                expect("=")
+                val body = Def.DefBody.DataCtor(expectType())
+                defs += Def(identifier, body)
+                expect(";")
+            } else if (accept("type")) {
+                val identifier = expectIdentifier()
+                expect("=")
+                val body = Def.DefBody.TypeAlias(expectType())
+                defs += Def(identifier, body)
+                expect(";")
+            } else if (accept("def")) {
+                val identifier = expectIdentifier()
+                val annotatedType = acceptTypeAnnotation()
+                expect("=")
+                val body = Def.DefBody.ExprBody(acceptExpression(0) ?: unexpectedToken("expression"), annotatedType)
+                defs += Def(identifier, body)
+                expect(";")
+            } else if (accept("fn")) {
+                val identifier = expectIdentifier()
+                val lhs = eatPattern()
+                val returnTypeAnnotation = if (accept("->")) {
+                    val t = expectType()
+                    expect("=")
+                    t
+                } else {
+                    expect("=>")
+                    null
+                }
+                val rhs = expectExpression(0)
+                val fn = when {
+                    !lhs.isRefutable -> Expression.Function(lhs, rhs, returnTypeAnnotation = returnTypeAnnotation)
+                    else -> expected("Expected non-refutable pattern")
+                }
+                val body = Def.DefBody.FnBody(fn)
+                defs += Def(identifier, body)
+                expect(";")
+            } else break
         }
         return Module(defs.toSet())
     }
@@ -197,13 +224,13 @@ class Parser(private val inputAsText: String, private val tokens: List<Tokenizer
         try {
             val base = expectType()
             when {
-                base is Type.TypeApplication && base.args.isEmpty() && accept("::") -> {
+                base is Type.TypeApplication && base.args.isEmpty() && accept("=") -> {
                     val elems = mutableListOf(Pair(base.callee.identifier, expectType()))
                     when (front.tokenName) {
                         "," -> {
                             while (accept(",")) {
                                 val id = expectIdentifier()
-                                expect("::")
+                                expect("=")
                                 val type = expectType()
                                 elems += Pair(id, type)
                             }
@@ -212,7 +239,7 @@ class Parser(private val inputAsText: String, private val tokens: List<Tokenizer
                         "|" -> {
                             while (accept("|")) {
                                 val id = expectIdentifier()
-                                expect("::")
+                                expect("=")
                                 val type = expectType()
                                 elems += Pair(id, type)
                             }
@@ -267,7 +294,7 @@ class Parser(private val inputAsText: String, private val tokens: List<Tokenizer
                     val id = expectIdentifier()
                     expect("=")
                     val expr = expectExpression(0)
-                    if (fields.any { it.first == id})
+                    if (fields.any { it.first == id })
                         throw Exception("identifier $id given two values $here")
                     fields += Pair(id, expr)
                 }
@@ -312,12 +339,16 @@ class Parser(private val inputAsText: String, private val tokens: List<Tokenizer
                 return Expression.Conditional(condition, ifTrue, ifFalse)
             }
             accept("fn") -> {
-                //val lhs = eatExpressionParenthesisInsides("=>")
                 val lhs = eatPattern()
-                eat("=>")
+                val returnTypeAnnotation = if (accept("->")) {
+                    expectType()
+                } else {
+                    eat("=>")
+                    null
+                }
                 val rhs = expectExpression(0)
                 return when {
-                    !lhs.isRefutable -> Expression.Function(lhs, rhs)
+                    !lhs.isRefutable -> Expression.Function(lhs, rhs, returnTypeAnnotation = returnTypeAnnotation)
                     else -> expected("Expected non-refutable pattern")
                 }
             }

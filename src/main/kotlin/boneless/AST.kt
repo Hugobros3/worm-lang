@@ -19,23 +19,18 @@ sealed class Type {
 }
 
 data class Module(val defs: Set<Def>)
-data class Def(val identifier: Identifier, val parameters: List<DefParameter>, val annotatedType: Type?, val body: DefBody) : Typeable by typeable() {
-    init {
-        assert(parameters.isEmpty()) { "unsupported" }
-    }
-
+data class Def(val identifier: Identifier, val body: DefBody) : Typeable by typeable() {
     sealed class DefBody {
-        data class ExprBody(val expr: Expression): DefBody()
+        data class ExprBody(val expr: Expression, val annotatedType: Type?): DefBody()
         data class DataCtor(val type: Type): DefBody() {
             // Created by type-checker
             lateinit var nominalType: Type.NominalType
         }
+        data class FnBody(val fn: Expression.Function): DefBody()
         data class TypeAlias(val type: Type): DefBody()
     }
 
     val is_type: Boolean = body is DefBody.TypeAlias
-
-    data class DefParameter(val identifier: Identifier)
 }
 
 sealed class Instruction {
@@ -86,7 +81,7 @@ sealed class Expression : Typeable by typeable() {
     data class RecordExpression(val fields: List<Pair<Identifier, Expression>>) : Expression()
 
     data class Invocation(val callee: Expression, val args: List<Expression>) : Expression()
-    data class Function(val parameters: Pattern, val body: Expression) : Expression()
+    data class Function(val parameters: Pattern, val body: Expression, val returnTypeAnnotation: Type? = null) : Expression()
 
     data class Ascription(val e: Expression, val ascribedType: Type) : Expression()
     data class Cast(val e: Expression, val destinationType: Type) : Expression()
