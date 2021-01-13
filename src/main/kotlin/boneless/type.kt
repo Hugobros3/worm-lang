@@ -48,81 +48,116 @@ fun type(module: Module) {
     TypeChecker(module).type()
 }
 
+interface Typeable {
+    val type: Type?
+    fun set_type(type: Type)
+}
+
+fun typeable() = object : Typeable {
+    private var _type: Type? = null
+
+    override val type: Type?
+        get() = _type
+
+    override fun set_type(type: Type) {
+        if (_type != null)
+            throw Exception("Attempted to set type twice")
+        _type = type
+    }
+
+}
+
 class TypeChecker(val module: Module) {
-    val map = mutableMapOf<Any, Type>()
+    //val map = mutableMapOf<Any, Type>()
     val stack = mutableListOf<Frame>()
 
-    class Frame(val typingWhat: Any)
+    class Frame(val typingWhat: Typeable)
 
-    private fun cannot_infer(node: Any): Nothing {
-        throw Exception("Cannot infer")
+    private fun cannot_infer(node: Typeable): Nothing {
+        throw Exception("Cannot infer $node")
     }
+
     private fun type_error(error: String): Nothing {
         throw Exception("Error while typing: $error")
     }
 
-    fun enter(what: Any): Boolean {
-        val oh_no = stack.any { it.typingWhat == what }
-        if (oh_no) {
+    fun enter(what: Typeable): Frame {
+        if (stack.any { it.typingWhat == what }) {
             //error("The type checker has run into recursive problems typing $what")
         }
-        stack.add(0, Frame(what))
-        return oh_no
+        val frame = Frame(what)
+        stack.add(0, frame)
+        return frame
     }
 
     fun leave() = stack.removeAt(0)
-    fun <R: Type> infer_wrap(what: Any, f: () -> R): R {
-        var type = map[what]
-        if (type != null)
-            return type as R
-        enter(what)
-        type = f()
-        map[what] = type
-        leave()
-        return type
-    }
-    fun <R: Type> check_wrap(what: Any, f: () -> R): R {
-        var type = map[what]
-        //if (type != null)
-        //    throw Exception("Called check but a type already exists")
-        enter(what)
-        type = f()
-        map[what] = type
-        leave()
-        return type
-    }
-
-    fun type() {
-        for (def in module.defs) {
-            def.type = infer(def)
-        }
-    }
 
     fun expect(type: Type, expected_type: Type) {
         if (type != expected_type)
             throw Exception("Expected $expected_type but got $type")
     }
 
-    fun infer(def: Def): Type = infer_wrap(def) {
-        when(val body = def.body) {
-            is Def.DefBody.ExprBody -> { infer(body.expr) }
+    fun infer(node: Typeable): Type {
+        node.type?.let { return (it) }
+        val inferred = when(node) {
+            is Def -> inferDef(node)
+            is Value -> inferValue(node)
+            is Expression -> inferExpr(node)
+            is Pattern -> inferPattern(node)
+            else -> error("not a typeable node")
+        }
+        node.set_type(inferred)
+        return inferred
+    }
+
+    fun check(node: Typeable, expected_type: Type): Type {
+        node.type?.let { throw Exception("The type already exists!") }
+        val checked = when(node) {
+            is Def -> checkDef(node, expected_type)
+            is Value -> checkValue(node, expected_type)
+            is Expression -> checkExpr(node, expected_type)
+            is Pattern -> checkPattern(node, expected_type)
+            else -> error("not a typeable node")
+        }
+        node.set_type(checked)
+        return checked
+    }
+
+    fun type() {
+        for (def in module.defs) {
+            infer(def)
+        }
+    }
+
+    fun inferDef(def: Def): Type {
+        return when (val body = def.body) {
+            is Def.DefBody.ExprBody -> {
+                if (def.annotatedType == null)
+                    infer(body.expr)
+                else
+                    check(body.expr, resolveType(def.annotatedType))
+            }
             is Def.DefBody.DataCtor -> {
-                body.nominalType = Type.NominalType(def.identifier, body.type)
-                Type.FnType(body.type, body.nominalType, constructorFor = body.nominalType)
+                body.nominalType = Type.NominalType(def.identifier, resolveType(body.type))
+                Type.FnType(resolveType(body.type), body.nominalType, constructorFor = body.nominalType)
             }
             is Def.DefBody.TypeAlias -> body.type
         }
     }
 
-    fun infer(expr: Expression): Type = infer_wrap(expr) {
-        when (expr) {
+    fun checkDef(def: Def, expected_type: Type): Type {
+        TODO()
+    }
+
+    fun inferExpr(expr: Expression): Type {
+        return when (expr) {
             is Expression.QuoteValue -> infer(expr.value)
             is Expression.QuoteType -> TODO()
             is Expression.IdentifierRef -> {
-                when(val r = expr.resolved) {
+                when (val r = expr.referenced.resolved) {
                     is BoundIdentifier.ToDef -> infer(r.def)
-                    is BoundIdentifier.ToLet -> infer(r.let)
                     is BoundIdentifier.ToPatternBinder -> infer(r.binder)
+                    is BoundIdentifier.ToBuiltinFn -> r.fn.type
                 }
             }
             is Expression.ListExpression -> {
@@ -138,7 +173,7 @@ class TypeChecker(val module: Module) {
                 Type.RecordType(inferred)
             }
             is Expression.Invocation -> {
-                val targetType = infer(expr.target)
+                val targetType = infer(expr.callee)
                 val argsType: Type = when {
                     expr.args.isEmpty() -> unit_type()
                     expr.args.size == 1 -> infer(expr.args[0])
@@ -158,8 +193,8 @@ class TypeChecker(val module: Module) {
             is Expression.Cast -> TODO()
             is Expression.Sequence -> {
                 for (inst in expr.instructions)
-                    infer(inst)
-                if(expr.yieldValue == null)
+                    typeInstruction(inst)
+                if (expr.yieldValue == null)
                     unit_type()
                 else
                     infer(expr.yieldValue)
@@ -168,9 +203,18 @@ class TypeChecker(val module: Module) {
         }
     }
 
-    fun infer(value: Value): Type = infer_wrap(value) {
-        when (value) {
-            is Value.NumLiteral -> if (value.num.toDouble() == value.num.toInt().toDouble()) Type.PrimitiveType(PrimitiveType.I32) else Type.PrimitiveType(PrimitiveType.F32)
+    // TODO mega dumb
+    fun checkExpr(expr: Expression, expected_type: Type): Type {
+        val computed = inferExpr(expr)
+        expect(computed, expected_type)
+        return computed
+    }
+
+    fun inferValue(value: Value): Type {
+        return when (value) {
+            is Value.NumLiteral -> if (value.num.toDouble() == value.num.toInt().toDouble()) Type.PrimitiveType(
+                PrimitiveType.I32
+            ) else Type.PrimitiveType(PrimitiveType.F32)
             is Value.StrLiteral -> TODO()
             is Value.ListLiteral -> {
                 val types = value.list.map { infer(it) }
@@ -187,8 +231,12 @@ class TypeChecker(val module: Module) {
         }
     }
 
-    fun infer(pattern: Pattern): Type = infer_wrap(pattern) {
-        when(pattern) {
+    fun checkValue(value: Value, expected_type: Type): Type {
+        TODO()
+    }
+
+    fun inferPattern(pattern: Pattern): Type {
+        return when (pattern) {
             is Pattern.Binder -> cannot_infer(pattern)
             is Pattern.Literal -> infer(pattern.value)
             is Pattern.ListPattern -> {
@@ -205,35 +253,28 @@ class TypeChecker(val module: Module) {
                 Type.RecordType(inferred)
             }
             is Pattern.CtorPattern -> {
-                val fn_type: Type = when(val r = pattern.resolved) {
-                    is BoundIdentifier.ToDef -> infer(r.def)
-                    is BoundIdentifier.ToLet -> TODO()
-                    is BoundIdentifier.ToPatternBinder -> TODO()
-                }
-                if (fn_type !is Type.FnType)
-                    type_error("$fn_type is not a function type")
+                val nominalTypeCtor = inferTypeOfBinding(pattern.callee.resolved) as? Type.FnType
+                if (nominalTypeCtor == null)
+                    type_error("a constructor pattern has to produce a nominal type")
                 assert(pattern.args.size > 0)
                 val arg_ptrn: Pattern = when {
-                    //pattern.args.isEmpty() -> Pattern.Literal(Value.ListLiteral(emptyList()))
                     pattern.args.size == 1 -> pattern.args[0]
                     else -> Pattern.ListPattern(pattern.args)
                 }
-                check(arg_ptrn, fn_type.dom)
-                //expect(arg_type, fn_type.dom)
-                fn_type.codom
+                check(arg_ptrn, nominalTypeCtor.dom)
+                nominalTypeCtor.codom
             }
             is Pattern.TypeAnnotatedPattern -> {
-                val type = infer(pattern.type)
-                check(pattern.inside, type)
+                check(pattern.inside, resolveType(pattern.annotatedType))
             }
         }
     }
 
-    fun check(pattern: Pattern, expected_type: Type): Type = check_wrap(pattern) {
-        when(pattern) {
+    fun checkPattern(pattern: Pattern, expected_type: Type): Type {
+        return when (pattern) {
             is Pattern.Binder -> expected_type
             is Pattern.Literal -> {
-                expect(infer(pattern), expected_type)
+                expect(inferPattern(pattern), expected_type)
                 expected_type
             }
             is Pattern.ListPattern -> {
@@ -242,51 +283,72 @@ class TypeChecker(val module: Module) {
                 val checked = pattern.list.mapIndexed { i, p -> check(p, expected_type.elements[i]) }
                 Type.TupleType(checked)
             }
-            is Pattern.RecordPattern -> TODO()
-            is Pattern.CtorPattern -> TODO()
+            is Pattern.RecordPattern -> {
+                if (expected_type !is Type.RecordType)
+                    type_error("expected not-a-record")
+                if (pattern.fields.map { it.first } == expected_type.elements.map { it.first }) {
+                    val checked = pattern.fields.mapIndexed { i, pair -> Pair(pair.first, check(pair.second, expected_type.elements[i].second)) }
+                    Type.RecordType(checked)
+                } else
+                    type_error("records don't match exactly") // TODO: lol subype
+            }
+            is Pattern.CtorPattern -> {
+                val nominalTypeCtor = inferTypeOfBinding(pattern.callee.resolved) as? Type.FnType
+                if (expected_type !is Type.NominalType || nominalTypeCtor == null)
+                    type_error("a constructor pattern has to produce a nominal type")
+                expect(nominalTypeCtor.codom, expected_type)
+                assert(pattern.args.size > 0)
+                val arg_ptrn: Pattern = when {
+                    pattern.args.size == 1 -> pattern.args[0]
+                    else -> Pattern.ListPattern(pattern.args)
+                }
+                check(arg_ptrn, nominalTypeCtor.dom)
+                expected_type
+            }
             is Pattern.TypeAnnotatedPattern -> TODO()
         }
     }
 
-    fun infer(type: Type): Type = infer_wrap(type) {
-        when(type) {
-            is Type.TypeApplication -> {
-                when(val resolved = type.resolved) {
-                    is BoundIdentifier.ToDef -> {
-                        val defType = infer(resolved.def)
-                        if (!resolved.def.is_type)
-                            type_error("${type.name} does not name a type")
-                        defType
-                    }
-                    // (let & pattern binders are not supported in typing ... for now anyways)
-                    else -> type_error("${type.name} does not name a type")
-                }
-            }
-            else -> type
+    fun inferTypeOfBinding(boundIdentifier: BoundIdentifier): Type? {
+        return when(boundIdentifier) {
+            is BoundIdentifier.ToDef -> if (boundIdentifier.def.is_type) null else infer(boundIdentifier.def)
+            is BoundIdentifier.ToPatternBinder -> infer(boundIdentifier.binder)
+            is BoundIdentifier.ToBuiltinFn -> boundIdentifier.fn.type
         }
     }
 
-    fun infer(inst: Instruction): Type = infer_wrap(inst) {
-        when(inst) {
-            is Instruction.Let -> TODO()
+    /** Removes type applications */
+    fun resolveType(type: Type): Type = when (type) {
+        is Type.TypeApplication -> {
+            when (val resolved = type.callee.resolved) {
+                is BoundIdentifier.ToDef -> {
+                    when(resolved.def.body) {
+                        is Def.DefBody.ExprBody -> type_error("${type.callee.identifier} does not name a type")
+                        is Def.DefBody.DataCtor -> {
+                            val defType = infer(resolved.def) as Type.FnType
+                            defType.codom
+                        }
+                        is Def.DefBody.TypeAlias -> {
+                            infer(resolved.def)
+                        }
+                    }
+                }
+                else -> error("let & pattern binders are not supported in typing ... for now anyways")
+            }
+        }
+        is Type.PrimitiveType -> type
+        is Type.RecordType -> type.copy(elements = type.elements.map { (i, t) -> Pair(i, resolveType(t)) })
+        is Type.TupleType -> type.copy(elements = type.elements.map { t -> resolveType(t) })
+        is Type.ArrayType -> type.copy(elementType = resolveType(type.elementType))
+        is Type.EnumType -> type.copy(elements = type.elements.map { (i, t) -> Pair(i, resolveType(t)) })
+        is Type.NominalType -> type.copy(dataType = resolveType(type.dataType))
+        is Type.FnType -> type.copy(dom = resolveType(type.dom), codom = resolveType(type.codom))
+    }
+
+    fun typeInstruction(inst: Instruction) {
+        when (inst) {
+            is Instruction.Let -> {}
             is Instruction.Evaluate -> TODO()
         }
-    }
-
-    /*fun check(inst: Instruction): Type = check_wrap(inst) {
-        when(inst) {
-            is Instruction.Let -> {
-                val expected_type = inst.type
-                if (expected_type != null)
-                    check(inst.body, expected_type)
-            }
-            is Instruction.Evaluate -> {
-                val inferred = infer(inst.e)
-            }
-        }
-    }*/
-
-    fun check(expr: Expression, expected_type: Type) {
-
     }
 }

@@ -24,19 +24,10 @@ class TestParser {
 
     private fun testParseType(str: String) {
         val p = Parser(str, Tokenizer(str).tokenize())
-        val t = p.expectType()
+        val t = p.parseType()
 
         println("Parsed type as: $t")
         println("Printed form: " + t.prettyPrint())
-    }
-
-    private fun expectFailure(f: () -> Unit) {
-        try {
-            f()
-            assertTrue(false)
-        } catch (e: Exception) {
-            println("Fails as expected: $e")
-        }
     }
 
     @Test

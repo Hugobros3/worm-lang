@@ -36,4 +36,32 @@ class TestType {
             def g3 :: fn Pos(x, y) => y;
         """.trimIndent())
     }
+
+    @Test
+    fun testTypeAnnotation() {
+        testType("""
+            def f1 : I32 :: 5;
+        """.trimIndent())
+
+        expectFailure {
+            testType("""
+                def f1 : [] :: 5;
+            """.trimIndent())
+        }
+    }
+
+    @Test
+    fun testBuiltins() {
+        for (builtin in BuiltinFn.values()) {
+            println(builtin.type)
+        }
+
+        testType("""
+            def pow2 :: fn (x: I32) => x * x;
+            
+            def Pos :: data [I32, I32];
+            def Square :: data [min :: Pos, max :: Pos];
+            def area :: fn Square(min = Pos (sx, sy), max = Pos (ex, ey)) => (ex - sx) * (ey - sy);
+        """.trimIndent())
+    }
 }

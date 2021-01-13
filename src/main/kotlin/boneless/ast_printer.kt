@@ -24,7 +24,7 @@ private class PrettyPrinter(val resugarizePrefixAndInfixSymbols: Boolean = true)
     } + ";"
 
     private fun Instruction.print() = when (this) {
-        is Instruction.Let -> "let $identifier" + type.printTypeAnnotation() + " = " + body.print() + ";"
+        is Instruction.Let -> "let ${binder.id}" + annotatedType.printTypeAnnotation() + " = " + body.print() + ";"
         is Instruction.Evaluate -> e.prettyPrint() + ";"
     }
 
@@ -44,13 +44,13 @@ private class PrettyPrinter(val resugarizePrefixAndInfixSymbols: Boolean = true)
         return when (this) {
             null -> ""
             is Expression.QuoteValue -> value.print(firstOperand)
-            is Expression.QuoteType -> "[" + type.print() + "]"
-            is Expression.IdentifierRef -> id
+            is Expression.QuoteType -> "[" + quotedType.print() + "]"
+            is Expression.IdentifierRef -> referenced.identifier
             is Expression.Invocation -> {
-                val callee = target
+                val callee = callee
                 if (resugarizePrefixAndInfixSymbols && callee is Expression.IdentifierRef) {
-                    val prefix = PrefixSymbol.values().find { it.rewrite == callee.id }
-                    val infix = InfixSymbol.values().find { it.rewrite == callee.id }
+                    val prefix = PrefixSymbol.values().find { it.rewrite == callee.referenced.identifier }
+                    val infix = InfixSymbol.values().find { it.rewrite == callee.referenced.identifier }
                     if (prefix != null && args.size == 1) {
                         return prefix.token.str + args[0].print(9999)
                     } else if (infix != null && args.size == 2) {
@@ -59,7 +59,7 @@ private class PrettyPrinter(val resugarizePrefixAndInfixSymbols: Boolean = true)
                     }
                 }
                 p = InfixSymbol.Application.priority
-                open() + target.print() + " " + args.mapIndexed { i, it -> it.print(p, i == 0) }.joinToString(" ") + close()
+                open() + this.callee.print() + " " + args.mapIndexed { i, it -> it.print(p, i == 0) }.joinToString(" ") + close()
             }
             is Expression.ListExpression -> "(" + list.joinToString(", ") { it.print() } + ")"
             is Expression.RecordExpression -> "(" + fields.map { (id, e) -> "$id = ${e.print()}" }.joinToString(", ") + ")"
@@ -73,18 +73,18 @@ private class PrettyPrinter(val resugarizePrefixAndInfixSymbols: Boolean = true)
             is Expression.Conditional -> "if " + condition.print() + " then " + ifTrue.print() + " else " + ifFalse.print()
             is Expression.Ascription -> {
                 p = InfixSymbol.Ascription.priority
-                open() + e.print(p, firstOperand) + " : " + type.print() + close()
+                open() + e.print(p, firstOperand) + " : " + ascribedType.print() + close()
             }
             is Expression.Cast -> {
                 p = InfixSymbol.Cast.priority
-                open() + e.print(p, firstOperand) + " as " + type.print() + close()
+                open() + e.print(p, firstOperand) + " as " + destinationType.print() + close()
             }
         }
     }
 
     fun Type.print(): String = when {
         this is Type.PrimitiveType -> primitiveType.name
-        this is Type.TypeApplication -> if (ops.isEmpty()) name else name + " " + ops.joinToString(" ") { it.print(0) }
+        this is Type.TypeApplication -> callee.identifier + (if (args.isEmpty()) "" else " " + args.joinToString(" ") { it.print(0) })
 
         this is Type.TupleType && elements.isEmpty() -> "[]"
         this is Type.TupleType && elements.isNotEmpty() -> "[" + elements.joinToString(", ") { e -> e.print() } + "]"
@@ -105,8 +105,8 @@ private class PrettyPrinter(val resugarizePrefixAndInfixSymbols: Boolean = true)
             is Pattern.Literal -> (if (value.isUnit) "" else "\\") + value.print(firstOperand)
             is Pattern.ListPattern -> "(" + list.joinToString(", ") { it.print(firstOperand) } + ")"
             is Pattern.RecordPattern -> "(" + fields.map { (id, p) -> "$id = ${p.print()}" }.joinToString(", ") + ")"
-            is Pattern.CtorPattern -> target + " " + args.joinToString(" ") { it.print(firstOperand) }
-            is Pattern.TypeAnnotatedPattern -> inside.print() + " : " + type.print()
+            is Pattern.CtorPattern -> callee.identifier + " " + args.joinToString(" ") { it.print(firstOperand) }
+            is Pattern.TypeAnnotatedPattern -> inside.print() + " : " + annotatedType.print()
         }
     }
 

@@ -1,7 +1,7 @@
 package boneless
 
 enum class PrefixSymbol(val token: Keyword, val rewrite: String) {
-    Minus(Keyword.Minus, "minus"),
+    Negate(Keyword.Minus, "negate"),
 
     Not(Keyword.Not, "not"),
     Reference(Keyword.Reference, "ref"),
@@ -13,8 +13,8 @@ enum class InfixSymbol(val token: Keyword, val priority: Int, val rewrite: Strin
     Ascription(Keyword.TypeAnnotation, 80, null),
     Cast(Keyword.As, 80, null),
 
-    Plus(Keyword.Plus, 40, "plus"),
-    Minus(Keyword.Minus, 40, "minus"),
+    Add(Keyword.Plus, 40, "add"),
+    Subtract(Keyword.Minus, 40, "subtract"),
     Multiply(Keyword.Multiply, 60, "multiply"),
     Divide(Keyword.Divide, 60, "divide"),
     Modulo(Keyword.Modulo, 60, "modulo"),
@@ -126,7 +126,7 @@ class Parser(private val inputAsText: String, private val tokens: List<Tokenizer
                     expect("=")
                     val rhs = acceptExpression(0) ?: unexpectedToken("expression")
                     expect(";")
-                    instructions += Instruction.Let(identifier, false, type, rhs)
+                    instructions += Instruction.Let(Pattern.Binder(identifier), false, type, rhs)
                 }
                 else -> {
                     yieldValue = acceptExpression(0) ?: break
@@ -141,7 +141,7 @@ class Parser(private val inputAsText: String, private val tokens: List<Tokenizer
         return Expression.Sequence(instructions, yieldValue)
     }
 
-    private fun eatModule(): Module {
+    private fun expectModule(): Module {
         val defs = mutableListOf<Def>()
         while (accept("def")) {
             val identifier = expectIdentifier()
@@ -168,9 +168,16 @@ class Parser(private val inputAsText: String, private val tokens: List<Tokenizer
     }
 
     fun expectType(): Type {
-        val id = acceptIdentifier() ?: return eatTypeBrackets()
+        if (accept("fn")) {
+            val dom = expectType()
+            eat("->")
+            val codom = expectType()
+            return Type.FnType(dom, codom)
+        }
 
-        val prim_type = PrimitiveType.values().find { it.name == id }
+        val calleeId = acceptIdentifier() ?: return eatTypeBrackets()
+
+        val prim_type = PrimitiveType.values().find { it.name == calleeId }
         if (prim_type != null)
             return Type.PrimitiveType(prim_type)
 
@@ -179,7 +186,7 @@ class Parser(private val inputAsText: String, private val tokens: List<Tokenizer
             ops += acceptExpression(0) ?: break
         }
 
-        return Type.TypeApplication(id, ops)
+        return Type.TypeApplication(BindPoint.new(calleeId), ops)
     }
 
     fun eatTypeBrackets(): Type {
@@ -190,8 +197,8 @@ class Parser(private val inputAsText: String, private val tokens: List<Tokenizer
         try {
             val base = expectType()
             when {
-                base is Type.TypeApplication && base.ops.isEmpty() && accept("::") -> {
-                    val elems = mutableListOf(Pair(base.name, expectType()))
+                base is Type.TypeApplication && base.args.isEmpty() && accept("::") -> {
+                    val elems = mutableListOf(Pair(base.callee.identifier, expectType()))
                     when (front.tokenName) {
                         "," -> {
                             while (accept(",")) {
@@ -249,20 +256,20 @@ class Parser(private val inputAsText: String, private val tokens: List<Tokenizer
 
         val firstExpression = acceptExpression(0)!!
         if (firstExpression is Expression.IdentifierRef && accept("=")) {
-            val firstId = firstExpression.id
-            // this is a dictionary !
-            val dict = mutableMapOf<Identifier, Expression>(firstId to acceptExpression(0)!!)
+            val firstId = firstExpression.referenced.identifier
+            // this is a record !
+            val fields = mutableListOf(Pair(firstId, acceptExpression(0)!!))
             while (true) {
                 if (accept(endToken)) {
-                    return Expression.RecordExpression(dict)
+                    return Expression.RecordExpression(fields)
                 } else {
                     expect(",")
                     val id = expectIdentifier()
                     expect("=")
                     val expr = expectExpression(0)
-                    if (dict.contains(id))
+                    if (fields.any { it.first == id})
                         throw Exception("identifier $id given two values $here")
-                    dict[id] = expr
+                    fields += Pair(id, expr)
                 }
             }
         } else {
@@ -294,7 +301,7 @@ class Parser(private val inputAsText: String, private val tokens: List<Tokenizer
                 val prim_type = PrimitiveType.values().find { it.name == id }
                 if (prim_type != null)
                     return Expression.QuoteType(Type.PrimitiveType(prim_type))
-                return Expression.IdentifierRef(id)
+                return Expression.IdentifierRef(BindPoint.new(id))
             }
             accept("if") -> {
                 val condition = acceptExpression(0)!!
@@ -339,7 +346,7 @@ class Parser(private val inputAsText: String, private val tokens: List<Tokenizer
             //    continue
             if (accept(prefix.token.str)) {
                 return Expression.Invocation(
-                    Expression.IdentifierRef(prefix.rewrite),
+                    Expression.IdentifierRef(BindPoint.new(prefix.rewrite)),
                     listOf(
                         acceptPrefixedPrimaryExpr()!!
                     )
@@ -362,7 +369,7 @@ class Parser(private val inputAsText: String, private val tokens: List<Tokenizer
                         val following = acceptPrimaryExpression() ?: continue
                         accumulator = when (val oldfirst = accumulator) {
                             is Expression.Invocation -> Expression.Invocation(
-                                oldfirst.target,
+                                oldfirst.callee,
                                 oldfirst.args + listOf(following)
                             )
                             else -> Expression.Invocation(accumulator, listOf(following))
@@ -381,7 +388,7 @@ class Parser(private val inputAsText: String, private val tokens: List<Tokenizer
                             else -> {
                                 val rhs = expectExpression(infix.priority)
                                 accumulator = Expression.Invocation(
-                                    Expression.IdentifierRef(infix.rewrite!!),
+                                    Expression.IdentifierRef(BindPoint.new(infix.rewrite!!)),
                                     listOf(
                                         accumulator,
                                         rhs
@@ -408,19 +415,19 @@ class Parser(private val inputAsText: String, private val tokens: List<Tokenizer
         val firstExpression = eatPattern()
         if (firstExpression is Pattern.Binder && accept("=")) {
             val firstId = firstExpression.id
-            // this is a dictionary !
-            val dict = mutableMapOf(firstId to eatPattern())
+            // this is a record !
+            val fields = mutableListOf(Pair(firstId, eatPattern()))
             while (true) {
                 if (accept(endToken)) {
-                    return Pattern.RecordPattern(dict)
+                    return Pattern.RecordPattern(fields)
                 } else {
                     expect(",")
                     val id = expectIdentifier()
                     expect("=")
                     val expr = eatPattern()
-                    if (dict.contains(id))
+                    if (fields.any { it.first == id })
                         throw Exception("identifier $id given two values $here")
-                    dict[id] = expr
+                    fields += Pair(id, expr)
                 }
             }
         } else {
@@ -466,7 +473,7 @@ class Parser(private val inputAsText: String, private val tokens: List<Tokenizer
                 args += arg
             }
             if (args.isNotEmpty())
-                return Pattern.CtorPattern(pattern.id, args)
+                return Pattern.CtorPattern(BindPoint.new(pattern.id), args)
         }
         if (accept(":")) {
             val typeAnnotation = expectType()
@@ -476,9 +483,14 @@ class Parser(private val inputAsText: String, private val tokens: List<Tokenizer
     }
 
     fun parseModule(): Module {
-        val module = eatModule()
-        if (front.tokenName != "EOF")
-            expectedToken("EOF")
+        val module = expectModule()
+        expect("EOF")
         return module
+    }
+
+    fun parseType(): Type {
+        val type = expectType()
+        expect("EOF")
+        return type
     }
 }

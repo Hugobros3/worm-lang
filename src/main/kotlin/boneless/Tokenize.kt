@@ -30,6 +30,7 @@ enum class Keyword(val str: String) {
     DefinitionSeparator("::"),
     Range(".."),
     Map("=>"),
+    Arrow("->"),
     Eq("=="),
     NotEq("!="),
     InfEq("<="),
