@@ -37,7 +37,7 @@ enum class PrimitiveType(val size: Int) {
     //I8(1),
     //I16(2),
     I32(4),
-    //I64(8),
+    I64(8),
 
     F32(4),
     // F64(8)
@@ -138,10 +138,10 @@ class TypeChecker(val module: Module) {
                     check(body.expr, resolveType(body.annotatedType))
             }
             is Def.DefBody.DataCtor -> {
-                body.nominalType = Type.NominalType(def.identifier, resolveType(body.type))
-                Type.FnType(resolveType(body.type), body.nominalType, constructorFor = body.nominalType)
+                body.nominalType = Type.NominalType(def.identifier, resolveType(body.datatype))
+                Type.FnType(resolveType(body.datatype), body.nominalType, constructorFor = body.nominalType)
             }
-            is Def.DefBody.TypeAlias -> body.type
+            is Def.DefBody.TypeAlias -> resolveType(body.aliasedType)
             is Def.DefBody.FnBody -> infer(body.fn)
         }
     }
@@ -175,13 +175,13 @@ class TypeChecker(val module: Module) {
             }
             is Expression.Invocation -> {
                 val targetType = infer(expr.callee)
+                if (targetType !is Type.FnType)
+                    throw Exception("invocation callee is not a function $targetType")
                 val argsType: Type = when {
                     expr.args.isEmpty() -> unit_type()
                     expr.args.size == 1 -> infer(expr.args[0])
                     else -> infer(Expression.ListExpression(expr.args))
                 }
-                if (targetType !is Type.FnType)
-                    throw Exception("Tried to call non-functional type: $targetType")
                 expect(argsType, targetType.dom)
                 targetType.codom
             }
@@ -209,14 +209,48 @@ class TypeChecker(val module: Module) {
 
     // TODO mega dumb
     fun checkExpr(expr: Expression, expected_type: Type): Type {
-        val computed = inferExpr(expr)
+        /*val computed = inferExpr(expr)
         expect(computed, expected_type)
-        return computed
+        return computed*/
+        return when(expr) {
+            is Expression.QuoteValue -> checkValue(expr.value, expected_type)
+            is Expression.QuoteType -> TODO()
+            is Expression.IdentifierRef -> {
+                expect( when (val r = expr.referenced.resolved) {
+                    is BoundIdentifier.ToDef -> infer(r.def,)
+                    is BoundIdentifier.ToPatternBinder -> infer(r.binder)
+                    is BoundIdentifier.ToBuiltinFn -> {
+                        r.fn.type
+                    }
+                }, expected_type)
+                expected_type
+            }
+            is Expression.ListExpression -> TODO()
+            is Expression.RecordExpression -> TODO()
+            is Expression.Invocation -> {
+                val targetType = infer(expr.callee)
+                if (targetType !is Type.FnType)
+                    throw Exception("invocation callee is not a function $targetType")
+                val argsType: Type = when {
+                    expr.args.isEmpty() -> unit_type()
+                    expr.args.size == 1 -> infer(expr.args[0])
+                    else -> infer(Expression.ListExpression(expr.args))
+                }
+                expect(argsType, targetType.dom)
+                expect(targetType.codom, expected_type)
+                targetType.codom
+            }
+            is Expression.Function -> TODO()
+            is Expression.Ascription -> TODO()
+            is Expression.Cast -> TODO()
+            is Expression.Sequence -> TODO()
+            is Expression.Conditional -> TODO()
+        }
     }
 
     fun inferValue(value: Value): Type {
         return when (value) {
-            is Value.NumLiteral -> if (value.num.toDouble() == value.num.toInt().toDouble()) Type.PrimitiveType(
+            is Value.NumLiteral -> if (value.num.toIntOrNull() != null) Type.PrimitiveType(
                 PrimitiveType.I32
             ) else Type.PrimitiveType(PrimitiveType.F32)
             is Value.StrLiteral -> TODO()
@@ -236,7 +270,16 @@ class TypeChecker(val module: Module) {
     }
 
     fun checkValue(value: Value, expected_type: Type): Type {
-        TODO()
+        return when(expected_type) {
+            is Type.PrimitiveType -> if(value is Value.NumLiteral) expected_type else type_error("not a numerical literal")
+            is Type.TypeApplication -> TODO()
+            is Type.RecordType -> TODO()
+            is Type.TupleType -> TODO()
+            is Type.ArrayType -> TODO()
+            is Type.EnumType -> TODO()
+            is Type.NominalType -> TODO()
+            is Type.FnType -> TODO()
+        }
     }
 
     fun inferPattern(pattern: Pattern): Type {
@@ -266,7 +309,7 @@ class TypeChecker(val module: Module) {
                     else -> Pattern.ListPattern(pattern.args)
                 }
                 check(arg_ptrn, nominalTypeCtor.dom)
-                nominalTypeCtor.codom
+                nominalTypeCtor.codom as Type.NominalType
             }
             is Pattern.TypeAnnotatedPattern -> {
                 check(pattern.inside, resolveType(pattern.annotatedType))
@@ -314,7 +357,58 @@ class TypeChecker(val module: Module) {
                 check(arg_ptrn, nominalTypeCtor.dom)
                 expected_type
             }
-            is Pattern.TypeAnnotatedPattern -> TODO()
+            is Pattern.TypeAnnotatedPattern -> {
+                // test me
+                expect(resolveType(pattern.annotatedType), expected_type);
+                check(pattern.inside, expected_type)
+            }
+        }
+    }
+
+    /** When a pattern is directly assigned an expression, try to co-infer the two together. This may set the types directly. */
+    fun coInferPtrnExpr(pattern: Pattern, expr: Expression): Type {
+        return when (pattern) {
+            is Pattern.Binder -> {
+                val inferred = infer(expr)
+                check(pattern, inferred)
+            }
+            is Pattern.Literal -> {
+                val inferred = infer(pattern.value)
+                check(expr, inferred)
+            }
+            is Pattern.ListPattern -> {
+                if (expr !is Expression.ListExpression)
+                    type_error("expected a list expression")
+                if (expr.list.size != pattern.list.size)
+                    type_error("pattern & expression size do not match")
+                val co_inferred = pattern.list.zip(expr.list).map { (p, e) -> coInferPtrnExpr(p, e) }
+                val type = Type.TupleType(co_inferred)
+                pattern.set_type(type)
+                expr.set_type(type)
+                type
+            }
+            is Pattern.RecordPattern -> {
+                if (expr !is Expression.RecordExpression)
+                    type_error("expected a record expression")
+                val co_inferred = mutableListOf<Pair<Identifier, Type>>()
+                for ((field, subpattern) in pattern.fields) {
+                    val (_, subexpr) = expr.fields.find { it.first == field } ?: type_error("missing field $field")
+                    co_inferred += Pair(field, coInferPtrnExpr(subpattern, subexpr))
+                }
+                val type = Type.RecordType(co_inferred)
+                pattern.set_type(type)
+                expr.set_type(type)
+                type
+            }
+            is Pattern.CtorPattern -> {
+                //if (expr !is Expression.Invocation)
+                //    type_error("expected an data ctor invocation")
+                val ptrnType = infer(pattern) as Type.NominalType
+                check(expr, ptrnType)
+            }
+            is Pattern.TypeAnnotatedPattern -> {
+                check(expr, infer(pattern))
+            }
         }
     }
 
@@ -358,6 +452,7 @@ class TypeChecker(val module: Module) {
     fun typeInstruction(inst: Instruction) {
         when (inst) {
             is Instruction.Let -> {
+                coInferPtrnExpr(inst.pattern, inst.body)
             }
             is Instruction.Evaluate -> TODO()
         }

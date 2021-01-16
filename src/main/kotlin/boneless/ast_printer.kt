@@ -1,8 +1,8 @@
 package boneless
 
-fun Module.prettyPrint(): String {
+fun Module.prettyPrint(resugarizePrefixAndInfixSymbols: Boolean = true, printInferredTypes: Boolean = false): String {
     val t = this
-    return PrettyPrinter().run { t.print() }
+    return PrettyPrinter(resugarizePrefixAndInfixSymbols, printInferredTypes).run { t.print() }
 }
 
 fun Expression.prettyPrint(): String {
@@ -15,12 +15,12 @@ fun Type.prettyPrint(): String {
     return PrettyPrinter().run { t.print() }
 }
 
-private class PrettyPrinter(val resugarizePrefixAndInfixSymbols: Boolean = true) {
+private class PrettyPrinter(val resugarizePrefixAndInfixSymbols: Boolean = true, val printInferredTypes: Boolean = false) {
     fun Module.print() = defs.joinToString("\n") { it.print() }
     fun Def.print() = when(body) {
         is Def.DefBody.ExprBody -> "def $identifier" + body.annotatedType.printTypeAnnotation() + " = " + body.expr.print(0)
-        is Def.DefBody.DataCtor -> "data " + identifier + " = " + body.type.print()
-        is Def.DefBody.TypeAlias -> "type " + identifier + " = " + body.type.print()
+        is Def.DefBody.DataCtor -> "data " + identifier + " = " + body.datatype.print()
+        is Def.DefBody.TypeAlias -> "type " + identifier + " = " + body.aliasedType.print()
         is Def.DefBody.FnBody -> "fn $identifier " + body.fn.run {
             if (returnTypeAnnotation == null)
                 parameters.print() + " => " + body.print()
@@ -30,7 +30,7 @@ private class PrettyPrinter(val resugarizePrefixAndInfixSymbols: Boolean = true)
     } + ";"
 
     private fun Instruction.print() = when (this) {
-        is Instruction.Let -> "let ${binder.id}" + annotatedType.printTypeAnnotation() + " = " + body.print() + ";"
+        is Instruction.Let -> "let ${pattern.print()}" + " = " + body.print() + ";"
         is Instruction.Evaluate -> e.prettyPrint() + ";"
     }
 
@@ -44,6 +44,12 @@ private class PrettyPrinter(val resugarizePrefixAndInfixSymbols: Boolean = true)
     }
 
     fun Expression?.print(infixOpPriority: Int = -1, firstOperand: Boolean = true): String {
+        return if (printInferredTypes) {
+            "(${this.print_(infixOpPriority, firstOperand)} /* ${this?.type.printTypeAnnotation()} */)"
+        } else this.print_(infixOpPriority, firstOperand)
+    }
+
+    fun Expression?.print_(infixOpPriority: Int = -1, firstOperand: Boolean = true): String {
         var p = 0
         fun open() = if (p <= infixOpPriority) "(" else ""
         fun close() = if (p <= infixOpPriority) ")" else ""
@@ -108,6 +114,11 @@ private class PrettyPrinter(val resugarizePrefixAndInfixSymbols: Boolean = true)
     }
 
     fun Pattern.print(firstOperand: Boolean = true): String {
+        return if (printInferredTypes) {
+            "(${this.print_(firstOperand)} /* ${this.type.printTypeAnnotation()} */)"
+        } else this.print_(firstOperand)
+    }
+    fun Pattern.print_(firstOperand: Boolean = true): String {
         return when (this) {
             is Pattern.Binder -> id
             is Pattern.Literal -> (if (value.isUnit) "" else "\\") + value.print(firstOperand)

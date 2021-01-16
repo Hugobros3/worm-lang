@@ -55,8 +55,8 @@ class BindHelper(private val module: Module) {
     internal fun bind(def: Def) {
         when(def.body) {
             is Def.DefBody.ExprBody -> bind(def.body.expr)
-            is Def.DefBody.DataCtor -> bind(def.body.type)
-            is Def.DefBody.TypeAlias -> bind(def.body.type)
+            is Def.DefBody.DataCtor -> bind(def.body.datatype)
+            is Def.DefBody.TypeAlias -> bind(def.body.aliasedType)
             is Def.DefBody.FnBody -> bind(def.body.fn)
             else -> throw Exception("Unhandled ast node ${def.body}")
         }
@@ -66,7 +66,7 @@ class BindHelper(private val module: Module) {
         when (inst) {
             is Instruction.Let -> {
                 bind(inst.body)
-                bind(inst.binder)
+                bind(inst.pattern)
                 //this[inst.identifier] = BoundIdentifier.ToLet(inst)
             }
             is Instruction.Evaluate -> bind(inst.e)

@@ -8,7 +8,6 @@ sealed class Type {
     data class RecordType(val elements: List<Pair<Identifier, Type>>) : Type()
     data class TupleType(val elements: List<Type>) : Type() {
         val isUnit: Boolean get() = elements.isEmpty()
-        val canBeDefiniteArray: Boolean get() = !isUnit && elements.all { it == elements[0] }
     }
     data class ArrayType(val elementType: Type, val size: Int) : Type() {
         val isDefinite: Boolean get() = size != 0
@@ -22,19 +21,19 @@ data class Module(val defs: Set<Def>)
 data class Def(val identifier: Identifier, val body: DefBody) : Typeable by typeable() {
     sealed class DefBody {
         data class ExprBody(val expr: Expression, val annotatedType: Type?): DefBody()
-        data class DataCtor(val type: Type): DefBody() {
+        data class DataCtor(val datatype: Type): DefBody() {
             // Created by type-checker
             lateinit var nominalType: Type.NominalType
         }
         data class FnBody(val fn: Expression.Function): DefBody()
-        data class TypeAlias(val type: Type): DefBody()
+        data class TypeAlias(val aliasedType: Type): DefBody()
     }
 
     val is_type: Boolean = body is DefBody.TypeAlias
 }
 
 sealed class Instruction {
-    data class Let(val binder: Pattern.Binder, val isMutable: Boolean, val annotatedType: Type?, val body: Expression) : Instruction()
+    data class Let(val pattern: Pattern, val isMutable: Boolean, val body: Expression) : Instruction()
     data class Evaluate(val e: Expression) : Instruction()
     //data class Var(val identifier: Identifier, val type: Type?, val defaultValue: Expression?) : Instruction()
 }
@@ -88,4 +87,5 @@ sealed class Expression : Typeable by typeable() {
 
     data class Sequence(val instructions: List<Instruction>, val yieldValue: Expression?) : Expression()
     data class Conditional(val condition: Expression, val ifTrue: Expression, val ifFalse: Expression) : Expression()
+    //data class WhileLoop(val condition: Expression, val ifTrue: Expression, val ifFalse: Expression) : Expression()
 }

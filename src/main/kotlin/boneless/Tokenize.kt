@@ -151,7 +151,8 @@ class Tokenizer(val input: String) {
                 }
                 input[i] in numbers -> {
                     var lit = ""
-                    while (input[i] in numbers) {
+                    var dots = 0
+                    while (input[i] in numbers || (input[i] == '.' && dots++ < 1)) {
                         lit += input[i]
                         i++
                     }

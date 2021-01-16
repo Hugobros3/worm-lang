@@ -121,12 +121,11 @@ class Parser(private val inputAsText: String, private val tokens: List<Tokenizer
         while (true) {
             when {
                 accept("let") -> {
-                    val identifier = expectIdentifier()
-                    val type = acceptTypeAnnotation()
+                    val ptrn = eatPattern()
                     expect("=")
                     val rhs = acceptExpression(0) ?: unexpectedToken("expression")
                     expect(";")
-                    instructions += Instruction.Let(Pattern.Binder(identifier), false, type, rhs)
+                    instructions += Instruction.Let(ptrn, false, rhs)
                 }
                 else -> {
                     yieldValue = acceptExpression(0) ?: break
