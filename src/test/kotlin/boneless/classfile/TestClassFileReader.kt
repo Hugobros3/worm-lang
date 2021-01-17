@@ -6,6 +6,8 @@ import java.io.File
 class TestClassFileReader {
     @Test
     fun testReader() {
-        readClassfile(File("Vec2.class"))
+        val cf = readClassfile(File("Vec2.class"))
+        println("success!")
+        cf.dump()
     }
 }

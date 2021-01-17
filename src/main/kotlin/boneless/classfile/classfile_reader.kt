@@ -102,17 +102,17 @@ class ClassFileReader(val file: File) {
         val minor = readShort()
         val major = readShort()
         val constant_pool_count = readShort()
-        println(minor)
-        println(major)
-        println(constant_pool_count)
+        //println(minor)
+        //println(major)
+        //println(constant_pool_count)
 
         var cpe = 1
-        val constant_pool = readN(constant_pool_count.toInt() - 1) {
+        val constant_pool = listOf(ConstantPoolEntry(CpInfoTags.Dummy, ConstantPoolEntryInfo.Dummy)) + (readN(constant_pool_count.toInt() - 1) {
             val entry = readCpInfo()
-            println("entry ${cpe++} $entry")
+            //println("entry ${cpe++} $entry")
             entry
-        }
-            println("read cpool !")
+        })
+        //println("read cpool !")
 
         val access_flags = readShort()
         val this_class = readShort()
@@ -120,27 +120,31 @@ class ClassFileReader(val file: File) {
 
         val interface_count = readShort()
         val interfaces = readN(interface_count.toInt()) { readShort() }
-        println("read $interface_count interfaces !")
+        //println("read $interface_count interfaces !")
 
         val field_count = readShort()
-        val fields = readN(field_count.toInt()) { readFieldInfo() }
-        println(fields)
-        println("read $field_count fields !")
+        val fields = readN(field_count.toInt()) { readFieldInfo(constant_pool) }
+        //println(fields)
+        //println("read $field_count fields !")
 
         val method_count = readShort()
-        val methods = readN(method_count.toInt()) { readMethodInfo() }
-        println(methods)
-        println("read $method_count methods !")
+        val methods = readN(method_count.toInt()) { readMethodInfo(constant_pool) }
+        //println(methods)
+        //println("read $method_count methods !")
 
-        val attributes_count = readShort()
-        val attributes = readN(attributes_count.toInt()) { readAttributeInfo() }
-        println(attributes)
-        println("read $attributes_count attributes !")
+        val attributes = readAttributes(constant_pool)
 
         assert(pos == bytes.size)
 
-        println("success!")
         return ClassFile(JavaVersion(major.toInt(), minor.toInt()), constant_pool, access_flags, this_class, super_class, interfaces, fields, methods, attributes)
+    }
+
+    fun readAttributes(cp: List<ConstantPoolEntry>): List<AttributeInfo> {
+        val attributes_count = readShort()
+        val attributes = readN(attributes_count.toInt()) { readAttributeInfo(cp) }
+        //println(attributes)
+        //println("read $attributes_count attributes !")
+        return attributes
     }
 
     fun readCpInfo(): ConstantPoolEntry {
@@ -168,35 +172,50 @@ class ClassFileReader(val file: File) {
             CpInfoTags.InvokeDynamic -> InvokeDynamicInfo(readShort(), readShort())
             CpInfoTags.Module -> ModuleInfo(readShort())
             CpInfoTags.Package -> PackageInfo(readShort())
+            CpInfoTags.Dummy -> throw Exception("lol no")
         }
         return ConstantPoolEntry(tag, info)
     }
 
-    fun readFieldInfo(): FieldInfo {
+    fun readFieldInfo(cp: List<ConstantPoolEntry>): FieldInfo {
         val access_flags = readShort()
         val name_index = readShort()
         val descriptor_index = readShort()
 
-        val attributes_count = readShort()
-        val attributes = readN(attributes_count.toInt()) { readAttributeInfo() }
-        return FieldInfo(access_flags, name_index, descriptor_index, attributes)
+        return FieldInfo(access_flags, name_index, descriptor_index, readAttributes(cp))
     }
 
-    fun readMethodInfo(): MethodInfo {
+    fun readMethodInfo(cp: List<ConstantPoolEntry>): MethodInfo {
         val access_flags = readShort()
         val name_index = readShort()
         val descriptor_index = readShort()
 
-        val attributes_count = readShort()
-        val attributes = readN(attributes_count.toInt()) { readAttributeInfo() }
-        return MethodInfo(access_flags, name_index, descriptor_index, attributes)
+        return MethodInfo(access_flags, name_index, descriptor_index, readAttributes(cp))
     }
 
-    fun readAttributeInfo(): AttributeInfo {
+    fun readAttributeInfo(cp: List<ConstantPoolEntry>): AttributeInfo {
         val attribute_name_index = readShort()
         val attribute_length = readInt()
-        val info = readBytes(attribute_length)
-        return AttributeInfo(attribute_name_index, info)
+        var info: ByteArray? = null
+        val interp: Attribute? = when(resolveNameUsingCP(cp, attribute_name_index.toInt())) {
+            "Code" -> {
+                val max_stack = readShort()
+                val max_locals = readShort()
+                val code_length = readInt()
+                val code = readBytes(code_length)
+                val exception_table_length = readShort()
+                val exceptions = readN(exception_table_length.toInt()) {
+                    Attribute.Code.ExceptionTableEntry(readShort(), readShort(), readShort(), readShort())
+                }
+                val attributes = readAttributes(cp)
+                Attribute.Code(max_stack, max_locals, code, exceptions, attributes)
+            }
+            else -> {
+                info = readBytes(attribute_length)
+                null
+            }
+        }
+        return AttributeInfo(attribute_name_index, info, interp)
     }
 }
 

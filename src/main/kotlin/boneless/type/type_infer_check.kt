@@ -193,11 +193,7 @@ class TypeChecker(val module: Module) {
         }
     }
 
-    // TODO mega dumb
     fun checkExpr(expr: Expression, expected_type: Type): Type {
-        /*val computed = inferExpr(expr)
-        expect(computed, expected_type)
-        return computed*/
         return when (expr) {
             is Expression.QuoteLiteral -> checkValue(expr.literal, expected_type)
             is Expression.QuoteType -> TODO()
