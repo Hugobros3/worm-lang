@@ -1,21 +1,11 @@
 package boneless
 
-typealias Identifier = String
+import boneless.bind.BindPoint
+import boneless.type.Type
+import boneless.type.Typeable
+import boneless.type.typeable
 
-sealed class Type {
-    data class PrimitiveType(val primitiveType: boneless.PrimitiveType) : Type()
-    data class TypeApplication(val callee: BindPoint, val args: List<Expression>) : Type()
-    data class RecordType(val elements: List<Pair<Identifier, Type>>) : Type()
-    data class TupleType(val elements: List<Type>) : Type() {
-        val isUnit: Boolean get() = elements.isEmpty()
-    }
-    data class ArrayType(val elementType: Type, val size: Int) : Type() {
-        val isDefinite: Boolean get() = size != 0
-    }
-    data class EnumType(val elements: List<Pair<Identifier, Type>>) : Type()
-    data class NominalType(val name: Identifier, val dataType: Type): Type()
-    data class FnType(val dom: Type, val codom: Type, val constructorFor: NominalType? = null, val builtin: BuiltinFn? = null) : Type()
-}
+typealias Identifier = String
 
 data class Module(val defs: Set<Def>)
 data class Def(val identifier: Identifier, val body: DefBody) : Typeable by typeable() {
@@ -35,18 +25,6 @@ data class Def(val identifier: Identifier, val body: DefBody) : Typeable by type
 sealed class Instruction {
     data class Let(val pattern: Pattern, val isMutable: Boolean, val body: Expression) : Instruction()
     data class Evaluate(val e: Expression) : Instruction()
-    //data class Var(val identifier: Identifier, val type: Type?, val defaultValue: Expression?) : Instruction()
-}
-
-sealed class Value : Typeable by typeable() {
-    data class NumLiteral(val num: String): Value()
-    data class StrLiteral(val str: String): Value()
-
-    // These can't really be parsed in expressions (the parser has no way of knowing if all the parameters are constant)
-    data class ListLiteral(val list: List<Value>): Value()
-    data class RecordLiteral(val fields: List<Pair<Identifier, Value>>): Value()
-
-    val isUnit: Boolean get() = this is ListLiteral && this.list.isEmpty()
 }
 
 sealed class Pattern : Typeable by typeable() {
@@ -88,4 +66,15 @@ sealed class Expression : Typeable by typeable() {
     data class Sequence(val instructions: List<Instruction>, val yieldValue: Expression?) : Expression()
     data class Conditional(val condition: Expression, val ifTrue: Expression, val ifFalse: Expression) : Expression()
     //data class WhileLoop(val condition: Expression, val ifTrue: Expression, val ifFalse: Expression) : Expression()
+}
+
+sealed class Value : Typeable by typeable() {
+    data class NumLiteral(val num: String): Value()
+    data class StrLiteral(val str: String): Value()
+
+    // These can't really be parsed in expressions (the parser has no way of knowing if all the parameters are constant)
+    data class ListLiteral(val list: List<Value>): Value()
+    data class RecordLiteral(val fields: List<Pair<Identifier, Value>>): Value()
+
+    val isUnit: Boolean get() = this is ListLiteral && this.list.isEmpty()
 }

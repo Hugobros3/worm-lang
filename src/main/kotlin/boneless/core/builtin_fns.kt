@@ -1,4 +1,8 @@
-package boneless
+package boneless.core
+
+import boneless.parse.Parser
+import boneless.parse.Tokenizer
+import boneless.type.Type
 
 enum class BuiltinFn(type_str: String) {
     ADD("fn [I32, I32] -> I32"),
@@ -8,7 +12,10 @@ enum class BuiltinFn(type_str: String) {
 
     val type: Type
     init {
-        val p = Parser(type_str, Tokenizer(type_str).tokenize())
+        val p = Parser(
+            type_str,
+            Tokenizer(type_str).tokenize()
+        )
         type = p.parseType()
     }
 }

@@ -1,4 +1,8 @@
-package boneless
+package boneless.bind
+
+import boneless.*
+import boneless.core.BuiltinFn
+import boneless.type.Type
 
 data class BindPoint private constructor(val identifier: Identifier, internal var resolved_: BoundIdentifier? = null) {
     val resolved: BoundIdentifier get() = resolved_ ?: throw Exception("This bind point was not resolved, did the bind pass run ?")
@@ -45,7 +49,8 @@ class BindHelper(private val module: Module) {
     init {
         push()
         for (builtin_fn in BuiltinFn.values()) {
-            this[builtin_fn.name.toLowerCase()] = BoundIdentifier.ToBuiltinFn(builtin_fn)
+            this[builtin_fn.name.toLowerCase()] =
+                BoundIdentifier.ToBuiltinFn(builtin_fn)
         }
         for (def in module.defs) {
             this[def.identifier] = BoundIdentifier.ToDef(def)
@@ -67,7 +72,6 @@ class BindHelper(private val module: Module) {
             is Instruction.Let -> {
                 bind(inst.body)
                 bind(inst.pattern)
-                //this[inst.identifier] = BoundIdentifier.ToLet(inst)
             }
             is Instruction.Evaluate -> bind(inst.e)
             else -> throw Exception("Unhandled ast node $inst")
@@ -127,6 +131,8 @@ class BindHelper(private val module: Module) {
                 type.args.forEach(::bind)
             }
             is Type.PrimitiveType -> {}
+            is Type.FnType -> { bind(type.dom) ; bind(type.codom)}
+            is Type.NominalType -> throw Exception("Inacessible: parser emits TypeApplications and type inference generates those !")
             else -> throw Exception("Unhandled ast node $type")
         }
     }

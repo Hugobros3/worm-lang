@@ -1,10 +1,17 @@
 package boneless
 
+import boneless.bind.bind
+import boneless.core.BuiltinFn
+import boneless.parse.Parser
+import boneless.parse.Tokenizer
+import boneless.type.type
+import boneless.util.prettyPrint
 import org.junit.Test
 
 class TestType {
     private fun testType(str: String) {
-        val parser = Parser(str, Tokenizer(str).tokenize())
+        val parser =
+            Parser(str, Tokenizer(str).tokenize())
         val module = parser.parseModule()
         bind(module)
         type(module)
@@ -82,7 +89,19 @@ class TestType {
                 let Cheese(big) = cheese; // yes it is !
                 // is it also cheese ?
                 let is_it: AlsoCheese = cheese;
+                
+                let pair = (1, 2);
+                let (p1, p2) = pair;
             };
         """.trimIndent())
+
+        expectFailure {
+            testType("""
+                fn f() => {
+                    let r = (a = 1, b = 2);
+                    let (a, b) = r;
+                };
+            """.trimIndent())
+        }
     }
 }

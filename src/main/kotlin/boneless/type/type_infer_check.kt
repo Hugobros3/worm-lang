@@ -1,4 +1,8 @@
-package boneless
+package boneless.type
+
+import boneless.*
+import boneless.bind.BoundIdentifier
+import boneless.util.prettyPrint
 
 fun Type.normalize(): Type = when {
     // tuples of size 1 do not exist
@@ -8,41 +12,7 @@ fun Type.normalize(): Type = when {
     else -> this
 }
 
-fun isSubtype(T: Type, S: Type): Boolean {
-    return when {
-        // A definite array is a subtype of a tuple type iff that tuple type is not unit, and it has the same data layout as the definite array
-        T is Type.ArrayType && S is Type.TupleType && T.isDefinite && T.size == S.elements.size && S.elements.all { it == T.elementType } -> true
-        // And vice versa
-        T is Type.TupleType && S is Type.ArrayType && S.isDefinite && S.size == T.elements.size && T.elements.all { it == S.elementType } -> true
-
-        // A struct type T is a subtype of a nameless subtype S if they contain the same things, in the same order
-        T is Type.RecordType && S is Type.TupleType && T.elements.map { it.second } == S.elements -> true
-
-        // A record type T is a subtype of another record type S iff the elements in T are a superset of the elements in S
-        T is Type.RecordType && S is Type.RecordType && T.elements.containsAll(S.elements) -> true
-        else -> false
-    }
-}
-
 fun unit_type() = Type.TupleType(emptyList())
-
-enum class PrimitiveType(val size: Int) {
-    /*
-    U8(1),
-    U16(2),
-    U32(4),
-    U64(8),*/
-
-    // Not needed for now
-    //I8(1),
-    //I16(2),
-    I32(4),
-    I64(8),
-
-    F32(4),
-    // F64(8)
-    ;
-}
 
 fun type(module: Module) {
     TypeChecker(module).type()
@@ -138,8 +108,13 @@ class TypeChecker(val module: Module) {
                     check(body.expr, resolveType(body.annotatedType))
             }
             is Def.DefBody.DataCtor -> {
-                body.nominalType = Type.NominalType(def.identifier, resolveType(body.datatype))
-                Type.FnType(resolveType(body.datatype), body.nominalType, constructorFor = body.nominalType)
+                body.nominalType =
+                    Type.NominalType(def.identifier, resolveType(body.datatype))
+                Type.FnType(
+                    resolveType(body.datatype),
+                    body.nominalType,
+                    constructorFor = body.nominalType
+                )
             }
             is Def.DefBody.TypeAlias -> resolveType(body.aliasedType)
             is Def.DefBody.FnBody -> infer(body.fn)
@@ -225,12 +200,19 @@ class TypeChecker(val module: Module) {
                 }, expected_type)
                 expected_type
             }
-            is Expression.ListExpression -> TODO()
+            is Expression.ListExpression -> {
+                if (expected_type !is Type.TupleType)
+                    type_error("expected type of list expression is not a tuple")
+                if (expected_type.elements.size != expr.list.size)
+                    type_error("expression has ${expr.list.size} elements but exepected type ${expected_type.prettyPrint()} has ${expected_type.elements.size}")
+                val checked = expr.list.zip(expected_type.elements).map { (e, et) -> check(e, et) }
+                Type.TupleType(checked)
+            }
             is Expression.RecordExpression -> TODO()
             is Expression.Invocation -> {
                 val targetType = infer(expr.callee)
                 if (targetType !is Type.FnType)
-                    throw Exception("invocation callee is not a function $targetType")
+                    type_error("invocation callee is not a function $targetType")
                 val argsType: Type = when {
                     expr.args.isEmpty() -> unit_type()
                     expr.args.size == 1 -> infer(expr.args[0])
@@ -251,14 +233,13 @@ class TypeChecker(val module: Module) {
     fun inferValue(value: Value): Type {
         return when (value) {
             is Value.NumLiteral -> if (value.num.toIntOrNull() != null) Type.PrimitiveType(
-                PrimitiveType.I32
-            ) else Type.PrimitiveType(PrimitiveType.F32)
+                PrimitiveTypeEnum.I32
+            ) else Type.PrimitiveType(PrimitiveTypeEnum.F32)
             is Value.StrLiteral -> TODO()
             is Value.ListLiteral -> {
                 val types = value.list.map { infer(it) }
                 when {
                     types.isEmpty() -> unit_type()
-                    //types.isNotEmpty() && types.all { it == types[0] } -> Type.ArrayType(types[0], types.size)
                     else -> Type.TupleType(types)
                 }
             }
@@ -270,15 +251,22 @@ class TypeChecker(val module: Module) {
     }
 
     fun checkValue(value: Value, expected_type: Type): Type {
-        return when(expected_type) {
-            is Type.PrimitiveType -> if(value is Value.NumLiteral) expected_type else type_error("not a numerical literal")
-            is Type.TypeApplication -> TODO()
-            is Type.RecordType -> TODO()
-            is Type.TupleType -> TODO()
-            is Type.ArrayType -> TODO()
-            is Type.EnumType -> TODO()
-            is Type.NominalType -> TODO()
-            is Type.FnType -> TODO()
+        return when(value) {
+            is Value.NumLiteral -> {
+                if (expected_type !is Type.PrimitiveType)
+                    type_error("Cannot type numerical literal '${value.num}' as a ${expected_type.prettyPrint()}")
+                expected_type
+            }
+            is Value.StrLiteral -> TODO()
+            is Value.ListLiteral -> {
+                if (expected_type !is Type.TupleType)
+                    type_error("expected type of list expression is not a tuple")
+                if (expected_type.elements.size != value.list.size)
+                    type_error("expression has ${value.list.size} elements but exepected type ${expected_type.prettyPrint()} has ${expected_type.elements.size}")
+                val checked = value.list.zip(expected_type.elements).map { (e, et) -> check(e, et) }
+                Type.TupleType(checked)
+            }
+            is Value.RecordLiteral -> TODO()
         }
     }
 
@@ -326,13 +314,13 @@ class TypeChecker(val module: Module) {
             }
             is Pattern.ListPattern -> {
                 if (expected_type !is Type.TupleType)
-                    type_error("expected not-a-list")
+                    type_error("expected ${expected_type.prettyPrint()}, got a list pattern")
                 val checked = pattern.list.mapIndexed { i, p -> check(p, expected_type.elements[i]) }
                 Type.TupleType(checked)
             }
             is Pattern.RecordPattern -> {
                 if (expected_type !is Type.RecordType)
-                    type_error("expected not-a-record")
+                    type_error("expected ${expected_type.prettyPrint()}, got a record pattern")
                 if (pattern.fields.map { it.first } == expected_type.elements.map { it.first }) {
                     val checked = pattern.fields.mapIndexed { i, pair ->
                         Pair(
@@ -367,18 +355,20 @@ class TypeChecker(val module: Module) {
 
     /** When a pattern is directly assigned an expression, try to co-infer the two together. This may set the types directly. */
     fun coInferPtrnExpr(pattern: Pattern, expr: Expression): Type {
+        fun fallback(): Type {
+            val inferred = infer(expr)
+            return check(pattern, inferred)
+        }
+
         return when (pattern) {
-            is Pattern.Binder -> {
-                val inferred = infer(expr)
-                check(pattern, inferred)
-            }
+            is Pattern.Binder -> fallback()
             is Pattern.Literal -> {
                 val inferred = infer(pattern.value)
                 check(expr, inferred)
             }
             is Pattern.ListPattern -> {
                 if (expr !is Expression.ListExpression)
-                    type_error("expected a list expression")
+                    return fallback()
                 if (expr.list.size != pattern.list.size)
                     type_error("pattern & expression size do not match")
                 val co_inferred = pattern.list.zip(expr.list).map { (p, e) -> coInferPtrnExpr(p, e) }
@@ -389,7 +379,7 @@ class TypeChecker(val module: Module) {
             }
             is Pattern.RecordPattern -> {
                 if (expr !is Expression.RecordExpression)
-                    type_error("expected a record expression")
+                    return fallback()
                 val co_inferred = mutableListOf<Pair<Identifier, Type>>()
                 for ((field, subpattern) in pattern.fields) {
                     val (_, subexpr) = expr.fields.find { it.first == field } ?: type_error("missing field $field")
@@ -401,8 +391,6 @@ class TypeChecker(val module: Module) {
                 type
             }
             is Pattern.CtorPattern -> {
-                //if (expr !is Expression.Invocation)
-                //    type_error("expected an data ctor invocation")
                 val ptrnType = infer(pattern) as Type.NominalType
                 check(expr, ptrnType)
             }
@@ -425,15 +413,13 @@ class TypeChecker(val module: Module) {
         is Type.TypeApplication -> {
             when (val resolved = type.callee.resolved) {
                 is BoundIdentifier.ToDef -> {
-                    when (val body = resolved.def.body) {
+                    when (resolved.def.body) {
                         is Def.DefBody.ExprBody -> type_error("${type.callee.identifier} does not name a type")
                         is Def.DefBody.DataCtor -> {
                             val defType = infer(resolved.def) as Type.FnType
                             defType.codom
                         }
-                        is Def.DefBody.TypeAlias -> {
-                            infer(resolved.def)
-                        }
+                        is Def.DefBody.TypeAlias -> { infer(resolved.def) }
                         is Def.DefBody.FnBody -> infer(resolved.def) as Type.FnType
                     }
                 }
@@ -451,10 +437,8 @@ class TypeChecker(val module: Module) {
 
     fun typeInstruction(inst: Instruction) {
         when (inst) {
-            is Instruction.Let -> {
-                coInferPtrnExpr(inst.pattern, inst.body)
-            }
-            is Instruction.Evaluate -> TODO()
+            is Instruction.Let -> { coInferPtrnExpr(inst.pattern, inst.body) }
+            is Instruction.Evaluate -> infer (inst.e)
         }
     }
 }

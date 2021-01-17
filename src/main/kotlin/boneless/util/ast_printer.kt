@@ -1,4 +1,9 @@
-package boneless
+package boneless.util
+
+import boneless.*
+import boneless.parse.InfixOperator
+import boneless.parse.PrefixOperator
+import boneless.type.Type
 
 fun Module.prettyPrint(resugarizePrefixAndInfixSymbols: Boolean = true, printInferredTypes: Boolean = false): String {
     val t = this
@@ -61,8 +66,8 @@ private class PrettyPrinter(val resugarizePrefixAndInfixSymbols: Boolean = true,
             is Expression.Invocation -> {
                 val callee = callee
                 if (resugarizePrefixAndInfixSymbols && callee is Expression.IdentifierRef) {
-                    val prefix = PrefixSymbol.values().find { it.rewrite == callee.referenced.identifier }
-                    val infix = InfixSymbol.values().find { it.rewrite == callee.referenced.identifier }
+                    val prefix = PrefixOperator.values().find { it.rewrite == callee.referenced.identifier }
+                    val infix = InfixOperator.values().find { it.rewrite == callee.referenced.identifier }
                     if (prefix != null && args.size == 1) {
                         return prefix.token.str + args[0].print(9999)
                     } else if (infix != null && args.size == 2) {
@@ -70,7 +75,7 @@ private class PrettyPrinter(val resugarizePrefixAndInfixSymbols: Boolean = true,
                         return open() + args[0].print(p) + " ${infix.token.str} " + args[1].print(p) + close()
                     }
                 }
-                p = InfixSymbol.Application.priority
+                p = InfixOperator.Application.priority
                 open() + this.callee.print() + " " + args.mapIndexed { i, it -> it.print(p, i == 0) }.joinToString(" ") + close()
             }
             is Expression.ListExpression -> "(" + list.joinToString(", ") { it.print() } + ")"
@@ -86,11 +91,11 @@ private class PrettyPrinter(val resugarizePrefixAndInfixSymbols: Boolean = true,
             }
             is Expression.Conditional -> "if " + condition.print() + " then " + ifTrue.print() + " else " + ifFalse.print()
             is Expression.Ascription -> {
-                p = InfixSymbol.Ascription.priority
+                p = InfixOperator.Ascription.priority
                 open() + e.print(p, firstOperand) + " : " + ascribedType.print() + close()
             }
             is Expression.Cast -> {
-                p = InfixSymbol.Cast.priority
+                p = InfixOperator.Cast.priority
                 open() + e.print(p, firstOperand) + " as " + destinationType.print() + close()
             }
         }

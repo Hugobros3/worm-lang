@@ -1,61 +1,9 @@
-package boneless
+package boneless.parse
 
 val numbers = "0123456789"
 
 fun Char.canStartIdentifier() = isLetter() || this == '_'
 fun Char.canMakeUpIdentifier() = canStartIdentifier() || this in numbers
-
-enum class Keyword(val str: String) {
-    /** This is never parsed */
-    None(""),
-
-    LParent("("),
-    RParent(")"),
-    LCurlyBrace("{"),
-    RCurlyBrace("}"),
-    LSquareBrace("["),
-    RSquareBrace("]"),
-
-    Def("def"),
-    Let("let"),
-    Var("var"),
-    Fn("fn"),
-    As("as"),
-    Data("data"),
-    Type("type"),
-    If("if"),
-    Then("then"),
-    Else("else"),
-
-    // DefinitionSeparator("::"),
-    Range(".."),
-    Map("=>"),
-    Arrow("->"),
-    Eq("=="),
-    NotEq("!="),
-    InfEq("<="),
-    GreaterEq(">="),
-
-    Assign("="),
-    Inf("<"),
-    Greater(">"),
-    StatementEnd(";"),
-    NextItem(","),
-    TypeAnnotation(":"),
-
-    Plus("+"),
-    Minus("-"),
-    Multiply("*"),
-    Divide("/"),
-    Modulo("%"),
-
-    Not("!"),
-    And("^"),
-    Or("|"),
-
-    Reference("&"),
-    Dereference("@"),
-}
 
 class Tokenizer(val input: String) {
     data class Token(val pos: Pos, val tokenName: String, val payload: String? = null)

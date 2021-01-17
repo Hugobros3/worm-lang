@@ -1,5 +1,6 @@
 package boneless
 
+import boneless.parse.Tokenizer
 import org.junit.Test
 
 class TestTokenizer {

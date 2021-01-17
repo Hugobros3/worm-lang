@@ -1,11 +1,16 @@
 package boneless
 
+import boneless.bind.bind
+import boneless.parse.Parser
+import boneless.parse.Tokenizer
+import boneless.util.prettyPrint
 import org.junit.Test
 
 class TestBinder {
 
     private fun testBind(str: String) {
-        val parser = Parser(str, Tokenizer(str).tokenize())
+        val parser =
+            Parser(str, Tokenizer(str).tokenize())
         val module = parser.parseModule()
         val module_serialized = module.prettyPrint()
         println(module_serialized)

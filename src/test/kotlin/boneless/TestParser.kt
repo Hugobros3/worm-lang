@@ -1,29 +1,38 @@
 package boneless
 
+import boneless.parse.Parser
+import boneless.parse.Tokenizer
+import boneless.util.prettyPrint
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class TestParser {
 
     private fun testModule(str: String) {
-        val parser = Parser(str, Tokenizer(str).tokenize())
+        val parser =
+            Parser(str, Tokenizer(str).tokenize())
         val program = parser.parseModule()
         val printedProgram = program.prettyPrint()
         println(printedProgram)
 
-        val parser2 = Parser(printedProgram, Tokenizer(printedProgram).tokenize())
+        val parser2 = Parser(
+            printedProgram,
+            Tokenizer(printedProgram).tokenize()
+        )
         val program2 = parser2.parseModule()
         assertTrue(program == program2)
     }
 
     private fun testParseSeq(str: String) {
-        val parser = Parser(str, Tokenizer(str).tokenize())
+        val parser =
+            Parser(str, Tokenizer(str).tokenize())
         val seq = parser.parseSequenceContents()
         println(seq.prettyPrint())
     }
 
     private fun testParseType(str: String) {
-        val p = Parser(str, Tokenizer(str).tokenize())
+        val p =
+            Parser(str, Tokenizer(str).tokenize())
         val t = p.parseType()
 
         println("Parsed type as: $t")
