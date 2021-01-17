@@ -90,6 +90,7 @@ private class PrettyPrinter(val resugarizePrefixAndInfixSymbols: Boolean = true,
                     open() + "fn " + parameters.print() + " -> " + returnTypeAnnotation.print() + " = " + body.print() + close()
             }
             is Expression.Conditional -> "if " + condition.print() + " then " + ifTrue.print() + " else " + ifFalse.print()
+            is Expression.WhileLoop -> "while " + loopCondition.print(0) + " do " + body.print(0)
             is Expression.Ascription -> {
                 p = InfixOperator.Ascription.priority
                 open() + expr.print(p, firstOperand) + " : " + ascribedType.print() + close()

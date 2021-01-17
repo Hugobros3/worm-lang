@@ -65,7 +65,7 @@ sealed class Expression : Typeable by typeable() {
 
     data class Sequence(val instructions: List<Instruction>, val yieldValue: Expression?) : Expression()
     data class Conditional(val condition: Expression, val ifTrue: Expression, val ifFalse: Expression) : Expression()
-    //data class WhileLoop(val condition: Expression, val ifTrue: Expression, val ifFalse: Expression) : Expression()
+    data class WhileLoop(val loopCondition: Expression, val body: Expression) : Expression()
 }
 
 sealed class Literal : Typeable by typeable() {

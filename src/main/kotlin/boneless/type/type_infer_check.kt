@@ -178,7 +178,18 @@ class TypeChecker(val module: Module) {
                 else
                     infer(expr.yieldValue)
             }
-            is Expression.Conditional -> TODO()
+            is Expression.Conditional -> {
+                check(expr.condition, Type.PrimitiveType(PrimitiveTypeEnum.Bool))
+                val left = infer(expr.ifTrue)
+                val right = infer(expr.ifFalse)
+                expect(left, right)
+                left
+            }
+            is Expression.WhileLoop -> {
+                check(expr.loopCondition, Type.PrimitiveType(PrimitiveTypeEnum.Bool))
+                infer(expr.body)
+                unit_type()
+            }
         }
     }
 
@@ -187,17 +198,19 @@ class TypeChecker(val module: Module) {
         /*val computed = inferExpr(expr)
         expect(computed, expected_type)
         return computed*/
-        return when(expr) {
+        return when (expr) {
             is Expression.QuoteLiteral -> checkValue(expr.literal, expected_type)
             is Expression.QuoteType -> TODO()
             is Expression.IdentifierRef -> {
-                expect( when (val r = expr.id.resolved) {
-                    is BoundIdentifier.ToDef -> infer(r.def,)
-                    is BoundIdentifier.ToPatternBinder -> infer(r.binder)
-                    is BoundIdentifier.ToBuiltinFn -> {
-                        r.fn.type
-                    }
-                }, expected_type)
+                expect(
+                    when (val r = expr.id.resolved) {
+                        is BoundIdentifier.ToDef -> infer(r.def,)
+                        is BoundIdentifier.ToPatternBinder -> infer(r.binder)
+                        is BoundIdentifier.ToBuiltinFn -> {
+                            r.fn.type
+                        }
+                    }, expected_type
+                )
                 expected_type
             }
             is Expression.ListExpression -> {
@@ -225,8 +238,16 @@ class TypeChecker(val module: Module) {
             is Expression.Function -> TODO()
             is Expression.Ascription -> TODO()
             is Expression.Cast -> TODO()
-            is Expression.Sequence -> TODO()
+            is Expression.Sequence -> {
+                for (inst in expr.instructions)
+                    typeInstruction(inst)
+                if (expr.yieldValue == null) {
+                    expect(unit_type(), expected_type); expected_type
+                } else
+                    check(expr.yieldValue, expected_type)
+            }
             is Expression.Conditional -> TODO()
+            is Expression.WhileLoop -> TODO()
         }
     }
 
@@ -251,7 +272,7 @@ class TypeChecker(val module: Module) {
     }
 
     fun checkValue(literal: Literal, expected_type: Type): Type {
-        return when(literal) {
+        return when (literal) {
             is Literal.NumLiteral -> {
                 if (expected_type !is Type.PrimitiveType)
                     type_error("Cannot type numerical literal '${literal.number}' as a ${expected_type.prettyPrint()}")
@@ -419,7 +440,9 @@ class TypeChecker(val module: Module) {
                             val defType = infer(resolved.def) as Type.FnType
                             defType.codom
                         }
-                        is Def.DefBody.TypeAlias -> { infer(resolved.def) }
+                        is Def.DefBody.TypeAlias -> {
+                            infer(resolved.def)
+                        }
                         is Def.DefBody.FnBody -> infer(resolved.def) as Type.FnType
                     }
                 }
@@ -437,8 +460,10 @@ class TypeChecker(val module: Module) {
 
     fun typeInstruction(inst: Instruction) {
         when (inst) {
-            is Instruction.Let -> { coInferPtrnExpr(inst.pattern, inst.body) }
-            is Instruction.Evaluate -> infer (inst.expr)
+            is Instruction.Let -> {
+                coInferPtrnExpr(inst.pattern, inst.body)
+            }
+            is Instruction.Evaluate -> infer(inst.expr)
         }
     }
 }

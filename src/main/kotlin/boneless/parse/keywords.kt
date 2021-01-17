@@ -21,6 +21,9 @@ enum class Keyword(val str: String) {
     If("if"),
     Then("then"),
     Else("else"),
+    While("while"),
+    Do("do"),
+    For("for"),
 
     // DefinitionSeparator("::"),
     Range(".."),

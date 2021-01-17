@@ -365,6 +365,12 @@ class Parser(private val inputAsText: String, private val tokens: List<Tokenizer
                     else -> expected("Expected non-refutable pattern")
                 }
             }
+            accept("while") -> {
+                val loopCondition = acceptExpression(0)!!
+                expect("do")
+                val body = acceptExpression(0)!!
+                return Expression.WhileLoop(loopCondition, body)
+            }
             accept("(") -> {
                 return eatExpressionParenthesisInsides(")")
             }

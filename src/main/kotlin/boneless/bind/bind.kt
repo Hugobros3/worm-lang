@@ -92,12 +92,12 @@ class BindHelper(private val module: Module) {
 
             is Expression.Conditional -> {
                 bind(expr.condition)
-                push()
                 bind(expr.ifTrue)
-                pop()
-                push()
                 bind(expr.ifFalse)
-                pop()
+            }
+            is Expression.WhileLoop -> {
+                bind(expr.loopCondition)
+                bind(expr.body)
             }
             is Expression.Function -> {
                 push()

@@ -1,6 +1,7 @@
 package boneless.type
 
 enum class PrimitiveTypeEnum(val size: Int) {
+    Bool(1),
     /*
     U8(1),
     U16(2),

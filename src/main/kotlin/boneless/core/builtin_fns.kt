@@ -5,9 +5,10 @@ import boneless.parse.Tokenizer
 import boneless.type.Type
 
 enum class BuiltinFn(type_str: String) {
-    ADD("fn [I32, I32] -> I32"),
-    MULTIPLY("fn [I32, I32] -> I32"),
-    SUBTRACT("fn [I32, I32] -> I32"),
+    Add("fn [I32, I32] -> I32"),
+    Multiply("fn [I32, I32] -> I32"),
+    Substract("fn [I32, I32] -> I32"),
+    Negate("fn I32 -> I32"),
     ;
 
     val type: Type

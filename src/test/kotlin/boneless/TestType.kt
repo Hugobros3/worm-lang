@@ -104,4 +104,20 @@ class TestType {
             """.trimIndent())
         }
     }
+
+    @Test
+    fun testControlFlow() {
+        testType("""
+            fn f(a: Bool) => if a then 1 else -1;
+        """.trimIndent())
+
+        testType("""
+            fn f(a: Bool) -> I32 = {
+                while a do {
+                    // a = a + 1;
+                };
+                -1
+            };
+        """.trimIndent())
+    }
 }
