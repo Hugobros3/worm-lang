@@ -127,10 +127,10 @@ class TestParser {
         testParseType("[[I32, I32], f32]")
         testParseType("[[I32, I32], [], f32]")
         testParseType("[f32..]")
-        testParseType("[f32^6]")
+        testParseType("[f32..6]")
         //testParseType("[Option [I32]]")
         //testParseType("Option [I32]")
-        testParseType("[I32^1]")
+        testParseType("[I32..1]")
     }
 
     @Test
@@ -156,23 +156,23 @@ class TestParser {
         """.trimIndent())
 
         testParseSeq("""
-            let x: [I32^2] = (one = 1, two = 2);
+            let x: [I32..2] = (one = 1, two = 2);
         """.trimIndent())
 
         expectFailure {
             testParseSeq("""
-            let x: [I32^2] = (one = 1, one = 2);
+            let x: [I32..2] = (one = 1, one = 2);
         """.trimIndent())
         }
     }
     @Test
     fun testCast() {
         testParseSeq("""
-            let x = (1, 2, 3, 4, 5) as [I32^5];
+            let x = (1, 2, 3, 4, 5) as [I32..5];
         """.trimIndent())
 
         testParseSeq("""
-            let x: [I32^5] = (1, 2, 3, 4, 5);
+            let x: [I32..5] = (1, 2, 3, 4, 5);
         """.trimIndent())
     }
 

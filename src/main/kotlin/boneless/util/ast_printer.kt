@@ -36,16 +36,16 @@ private class PrettyPrinter(val resugarizePrefixAndInfixSymbols: Boolean = true,
 
     private fun Instruction.print() = when (this) {
         is Instruction.Let -> "let ${pattern.print()}" + " = " + body.print() + ";"
-        is Instruction.Evaluate -> e.prettyPrint() + ";"
+        is Instruction.Evaluate -> expr.prettyPrint() + ";"
     }
 
     private fun Type?.printTypeAnnotation(): String = this?.let { ": " + it.print() } ?: ""
 
-    fun Value.print(firstOperand: Boolean = true): String = when (this) {
-        is Value.NumLiteral -> if (num.startsWith("-") && !firstOperand) "($num)" else num
-        is Value.StrLiteral -> "\"$str\""
-        is Value.ListLiteral -> "(" + list.joinToString(", ") { it.print() } + ")"
-        is Value.RecordLiteral -> "(" + fields.map { (id, e) -> "$id = $e" }.joinToString(", ") + ")"
+    fun Literal.print(firstOperand: Boolean = true): String = when (this) {
+        is Literal.NumLiteral -> if (number.startsWith("-") && !firstOperand) "($number)" else number
+        is Literal.StrLiteral -> "\"$string\""
+        is Literal.ListLiteral -> "(" + elements.joinToString(", ") { it.print() } + ")"
+        is Literal.RecordLiteral -> "(" + fields.joinToString(", ") { (id, e) -> "$id = $e" } + ")"
     }
 
     fun Expression?.print(infixOpPriority: Int = -1, firstOperand: Boolean = true): String {
@@ -60,14 +60,14 @@ private class PrettyPrinter(val resugarizePrefixAndInfixSymbols: Boolean = true,
         fun close() = if (p <= infixOpPriority) ")" else ""
         return when (this) {
             null -> ""
-            is Expression.QuoteValue -> value.print(firstOperand)
+            is Expression.QuoteLiteral -> literal.print(firstOperand)
             is Expression.QuoteType -> "[" + quotedType.print() + "]"
-            is Expression.IdentifierRef -> referenced.identifier
+            is Expression.IdentifierRef -> id.identifier
             is Expression.Invocation -> {
                 val callee = callee
                 if (resugarizePrefixAndInfixSymbols && callee is Expression.IdentifierRef) {
-                    val prefix = PrefixOperator.values().find { it.rewrite == callee.referenced.identifier }
-                    val infix = InfixOperator.values().find { it.rewrite == callee.referenced.identifier }
+                    val prefix = PrefixOperator.values().find { it.rewrite == callee.id.identifier }
+                    val infix = InfixOperator.values().find { it.rewrite == callee.id.identifier }
                     if (prefix != null && args.size == 1) {
                         return prefix.token.str + args[0].print(9999)
                     } else if (infix != null && args.size == 2) {
@@ -78,7 +78,7 @@ private class PrettyPrinter(val resugarizePrefixAndInfixSymbols: Boolean = true,
                 p = InfixOperator.Application.priority
                 open() + this.callee.print() + " " + args.mapIndexed { i, it -> it.print(p, i == 0) }.joinToString(" ") + close()
             }
-            is Expression.ListExpression -> "(" + list.joinToString(", ") { it.print() } + ")"
+            is Expression.ListExpression -> "(" + elements.joinToString(", ") { it.print() } + ")"
             is Expression.RecordExpression -> "(" + fields.map { (id, e) -> "$id = ${e.print()}" }.joinToString(", ") + ")"
             is Expression.Sequence -> "{\n" + instructions.joinToString("") { shift(it.print()) + "\n" } + if (yieldValue != null) (shift(
                 yieldValue.print(0)
@@ -92,11 +92,11 @@ private class PrettyPrinter(val resugarizePrefixAndInfixSymbols: Boolean = true,
             is Expression.Conditional -> "if " + condition.print() + " then " + ifTrue.print() + " else " + ifFalse.print()
             is Expression.Ascription -> {
                 p = InfixOperator.Ascription.priority
-                open() + e.print(p, firstOperand) + " : " + ascribedType.print() + close()
+                open() + expr.print(p, firstOperand) + " : " + ascribedType.print() + close()
             }
             is Expression.Cast -> {
                 p = InfixOperator.Cast.priority
-                open() + e.print(p, firstOperand) + " as " + destinationType.print() + close()
+                open() + expr.print(p, firstOperand) + " as " + destinationType.print() + close()
             }
         }
     }
@@ -110,7 +110,7 @@ private class PrettyPrinter(val resugarizePrefixAndInfixSymbols: Boolean = true,
 
         this is Type.RecordType -> "[" + elements.joinToString(", ") { (name, type) -> name + "=" + type.print() } + "]"
 
-        this is Type.ArrayType -> "[" + elementType.print() + (if (size == -1) ".." else "^$size") + "]"
+        this is Type.ArrayType -> "[" + elementType.print() + (if (size == -1) ".." else "..$size") + "]"
 
         this is Type.EnumType -> "[" + elements.joinToString(" | ") { (name, type) -> name + "=" + type.print() } + "]"
         this is Type.FnType -> dom.print() + " -> " + codom.print()
@@ -125,12 +125,12 @@ private class PrettyPrinter(val resugarizePrefixAndInfixSymbols: Boolean = true,
     }
     fun Pattern.print_(firstOperand: Boolean = true): String {
         return when (this) {
-            is Pattern.Binder -> id
-            is Pattern.Literal -> (if (value.isUnit) "" else "\\") + value.print(firstOperand)
-            is Pattern.ListPattern -> "(" + list.joinToString(", ") { it.print(firstOperand) } + ")"
+            is Pattern.BinderPattern -> id
+            is Pattern.LiteralPattern -> (if (literal.isUnit) "" else "\\") + literal.print(firstOperand)
+            is Pattern.ListPattern -> "(" + elements.joinToString(", ") { it.print(firstOperand) } + ")"
             is Pattern.RecordPattern -> "(" + fields.map { (id, p) -> "$id = ${p.print()}" }.joinToString(", ") + ")"
             is Pattern.CtorPattern -> callee.identifier + " " + args.joinToString(" ") { it.print(firstOperand) }
-            is Pattern.TypeAnnotatedPattern -> inside.print() + " : " + annotatedType.print()
+            is Pattern.TypeAnnotatedPattern -> pattern.print() + " : " + annotatedType.print()
         }
     }
 

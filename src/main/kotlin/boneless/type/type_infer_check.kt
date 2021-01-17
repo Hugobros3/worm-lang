@@ -71,7 +71,7 @@ class TypeChecker(val module: Module) {
         node.type?.let { return (it) }
         val inferred = when (node) {
             is Def -> inferDef(node)
-            is Value -> inferValue(node)
+            is Literal -> inferValue(node)
             is Expression -> inferExpr(node)
             is Pattern -> inferPattern(node)
             else -> error("not a typeable node")
@@ -84,7 +84,7 @@ class TypeChecker(val module: Module) {
         node.type?.let { throw Exception("The type already exists!") }
         val checked = when (node) {
             is Def -> checkDef(node, expected_type)
-            is Value -> checkValue(node, expected_type)
+            is Literal -> checkValue(node, expected_type)
             is Expression -> checkExpr(node, expected_type)
             is Pattern -> checkPattern(node, expected_type)
             else -> error("not a typeable node")
@@ -127,17 +127,17 @@ class TypeChecker(val module: Module) {
 
     fun inferExpr(expr: Expression): Type {
         return when (expr) {
-            is Expression.QuoteValue -> infer(expr.value)
+            is Expression.QuoteLiteral -> infer(expr.literal)
             is Expression.QuoteType -> TODO()
             is Expression.IdentifierRef -> {
-                when (val r = expr.referenced.resolved) {
+                when (val r = expr.id.resolved) {
                     is BoundIdentifier.ToDef -> infer(r.def)
                     is BoundIdentifier.ToPatternBinder -> infer(r.binder)
                     is BoundIdentifier.ToBuiltinFn -> r.fn.type
                 }
             }
             is Expression.ListExpression -> {
-                val inferred = expr.list.map { infer(it) }
+                val inferred = expr.elements.map { infer(it) }
                 assert(inferred.size > 1)
                 when {
                     //inferred.isEmpty() -> unit_type()
@@ -188,10 +188,10 @@ class TypeChecker(val module: Module) {
         expect(computed, expected_type)
         return computed*/
         return when(expr) {
-            is Expression.QuoteValue -> checkValue(expr.value, expected_type)
+            is Expression.QuoteLiteral -> checkValue(expr.literal, expected_type)
             is Expression.QuoteType -> TODO()
             is Expression.IdentifierRef -> {
-                expect( when (val r = expr.referenced.resolved) {
+                expect( when (val r = expr.id.resolved) {
                     is BoundIdentifier.ToDef -> infer(r.def,)
                     is BoundIdentifier.ToPatternBinder -> infer(r.binder)
                     is BoundIdentifier.ToBuiltinFn -> {
@@ -203,9 +203,9 @@ class TypeChecker(val module: Module) {
             is Expression.ListExpression -> {
                 if (expected_type !is Type.TupleType)
                     type_error("expected type of list expression is not a tuple")
-                if (expected_type.elements.size != expr.list.size)
-                    type_error("expression has ${expr.list.size} elements but exepected type ${expected_type.prettyPrint()} has ${expected_type.elements.size}")
-                val checked = expr.list.zip(expected_type.elements).map { (e, et) -> check(e, et) }
+                if (expected_type.elements.size != expr.elements.size)
+                    type_error("expression has ${expr.elements.size} elements but exepected type ${expected_type.prettyPrint()} has ${expected_type.elements.size}")
+                val checked = expr.elements.zip(expected_type.elements).map { (e, et) -> check(e, et) }
                 Type.TupleType(checked)
             }
             is Expression.RecordExpression -> TODO()
@@ -230,52 +230,52 @@ class TypeChecker(val module: Module) {
         }
     }
 
-    fun inferValue(value: Value): Type {
-        return when (value) {
-            is Value.NumLiteral -> if (value.num.toIntOrNull() != null) Type.PrimitiveType(
+    fun inferValue(literal: Literal): Type {
+        return when (literal) {
+            is Literal.NumLiteral -> if (literal.number.toIntOrNull() != null) Type.PrimitiveType(
                 PrimitiveTypeEnum.I32
             ) else Type.PrimitiveType(PrimitiveTypeEnum.F32)
-            is Value.StrLiteral -> TODO()
-            is Value.ListLiteral -> {
-                val types = value.list.map { infer(it) }
+            is Literal.StrLiteral -> TODO()
+            is Literal.ListLiteral -> {
+                val types = literal.elements.map { infer(it) }
                 when {
                     types.isEmpty() -> unit_type()
                     else -> Type.TupleType(types)
                 }
             }
-            is Value.RecordLiteral -> {
-                val types = value.fields.map { (f, v) -> Pair(f, infer(v)) }
+            is Literal.RecordLiteral -> {
+                val types = literal.fields.map { (f, v) -> Pair(f, infer(v)) }
                 Type.RecordType(types)
             }
         }
     }
 
-    fun checkValue(value: Value, expected_type: Type): Type {
-        return when(value) {
-            is Value.NumLiteral -> {
+    fun checkValue(literal: Literal, expected_type: Type): Type {
+        return when(literal) {
+            is Literal.NumLiteral -> {
                 if (expected_type !is Type.PrimitiveType)
-                    type_error("Cannot type numerical literal '${value.num}' as a ${expected_type.prettyPrint()}")
+                    type_error("Cannot type numerical literal '${literal.number}' as a ${expected_type.prettyPrint()}")
                 expected_type
             }
-            is Value.StrLiteral -> TODO()
-            is Value.ListLiteral -> {
+            is Literal.StrLiteral -> TODO()
+            is Literal.ListLiteral -> {
                 if (expected_type !is Type.TupleType)
                     type_error("expected type of list expression is not a tuple")
-                if (expected_type.elements.size != value.list.size)
-                    type_error("expression has ${value.list.size} elements but exepected type ${expected_type.prettyPrint()} has ${expected_type.elements.size}")
-                val checked = value.list.zip(expected_type.elements).map { (e, et) -> check(e, et) }
+                if (expected_type.elements.size != literal.elements.size)
+                    type_error("expression has ${literal.elements.size} elements but exepected type ${expected_type.prettyPrint()} has ${expected_type.elements.size}")
+                val checked = literal.elements.zip(expected_type.elements).map { (e, et) -> check(e, et) }
                 Type.TupleType(checked)
             }
-            is Value.RecordLiteral -> TODO()
+            is Literal.RecordLiteral -> TODO()
         }
     }
 
     fun inferPattern(pattern: Pattern): Type {
         return when (pattern) {
-            is Pattern.Binder -> cannot_infer(pattern)
-            is Pattern.Literal -> infer(pattern.value)
+            is Pattern.BinderPattern -> cannot_infer(pattern)
+            is Pattern.LiteralPattern -> infer(pattern.literal)
             is Pattern.ListPattern -> {
-                val inferred = pattern.list.map { infer(it) }
+                val inferred = pattern.elements.map { infer(it) }
                 assert(inferred.size > 1)
                 when {
                     //inferred.isEmpty() -> unit_type()
@@ -300,22 +300,22 @@ class TypeChecker(val module: Module) {
                 nominalTypeCtor.codom as Type.NominalType
             }
             is Pattern.TypeAnnotatedPattern -> {
-                check(pattern.inside, resolveType(pattern.annotatedType))
+                check(pattern.pattern, resolveType(pattern.annotatedType))
             }
         }
     }
 
     fun checkPattern(pattern: Pattern, expected_type: Type): Type {
         return when (pattern) {
-            is Pattern.Binder -> expected_type
-            is Pattern.Literal -> {
+            is Pattern.BinderPattern -> expected_type
+            is Pattern.LiteralPattern -> {
                 expect(inferPattern(pattern), expected_type)
                 expected_type
             }
             is Pattern.ListPattern -> {
                 if (expected_type !is Type.TupleType)
                     type_error("expected ${expected_type.prettyPrint()}, got a list pattern")
-                val checked = pattern.list.mapIndexed { i, p -> check(p, expected_type.elements[i]) }
+                val checked = pattern.elements.mapIndexed { i, p -> check(p, expected_type.elements[i]) }
                 Type.TupleType(checked)
             }
             is Pattern.RecordPattern -> {
@@ -348,7 +348,7 @@ class TypeChecker(val module: Module) {
             is Pattern.TypeAnnotatedPattern -> {
                 // test me
                 expect(resolveType(pattern.annotatedType), expected_type);
-                check(pattern.inside, expected_type)
+                check(pattern.pattern, expected_type)
             }
         }
     }
@@ -361,17 +361,17 @@ class TypeChecker(val module: Module) {
         }
 
         return when (pattern) {
-            is Pattern.Binder -> fallback()
-            is Pattern.Literal -> {
-                val inferred = infer(pattern.value)
+            is Pattern.BinderPattern -> fallback()
+            is Pattern.LiteralPattern -> {
+                val inferred = infer(pattern.literal)
                 check(expr, inferred)
             }
             is Pattern.ListPattern -> {
                 if (expr !is Expression.ListExpression)
                     return fallback()
-                if (expr.list.size != pattern.list.size)
+                if (expr.elements.size != pattern.elements.size)
                     type_error("pattern & expression size do not match")
-                val co_inferred = pattern.list.zip(expr.list).map { (p, e) -> coInferPtrnExpr(p, e) }
+                val co_inferred = pattern.elements.zip(expr.elements).map { (p, e) -> coInferPtrnExpr(p, e) }
                 val type = Type.TupleType(co_inferred)
                 pattern.set_type(type)
                 expr.set_type(type)
@@ -438,7 +438,7 @@ class TypeChecker(val module: Module) {
     fun typeInstruction(inst: Instruction) {
         when (inst) {
             is Instruction.Let -> { coInferPtrnExpr(inst.pattern, inst.body) }
-            is Instruction.Evaluate -> infer (inst.e)
+            is Instruction.Evaluate -> infer (inst.expr)
         }
     }
 }

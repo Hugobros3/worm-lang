@@ -13,7 +13,7 @@ data class BindPoint private constructor(val identifier: Identifier, internal va
 
 sealed class BoundIdentifier {
     data class ToDef(val def: Def) : BoundIdentifier()
-    data class ToPatternBinder(val binder: Pattern.Binder) : BoundIdentifier()
+    data class ToPatternBinder(val binder: Pattern.BinderPattern) : BoundIdentifier()
     data class ToBuiltinFn(val fn: BuiltinFn) : BoundIdentifier()
 }
 
@@ -73,20 +73,20 @@ class BindHelper(private val module: Module) {
                 bind(inst.body)
                 bind(inst.pattern)
             }
-            is Instruction.Evaluate -> bind(inst.e)
+            is Instruction.Evaluate -> bind(inst.expr)
             else -> throw Exception("Unhandled ast node $inst")
         }
     }
 
     fun bind(expr: Expression) {
         when (expr) {
-            is Expression.QuoteValue -> {}
+            is Expression.QuoteLiteral -> {}
             is Expression.QuoteType -> bind(expr.quotedType)
 
-            is Expression.Cast -> { bind(expr.e); bind(expr.destinationType) }
-            is Expression.Ascription -> { bind(expr.e); bind(expr.ascribedType) }
+            is Expression.Cast -> { bind(expr.expr); bind(expr.destinationType) }
+            is Expression.Ascription -> { bind(expr.expr); bind(expr.ascribedType) }
 
-            is Expression.ListExpression -> expr.list.forEach(::bind)
+            is Expression.ListExpression -> expr.elements.forEach(::bind)
             is Expression.RecordExpression -> expr.fields.forEach { bind(it.second) }
             is Expression.Invocation -> { bind(expr.callee) ; expr.args.forEach(::bind) }
 
@@ -114,7 +114,7 @@ class BindHelper(private val module: Module) {
                 pop()
             }
             is Expression.IdentifierRef -> {
-                expr.referenced.resolved_ = this[expr.referenced.identifier]
+                expr.id.resolved_ = this[expr.id.identifier]
             }
             else -> throw Exception("Unhandled ast node $expr")
         }
@@ -139,18 +139,18 @@ class BindHelper(private val module: Module) {
 
     fun bind(pattern: Pattern) {
         when(pattern) {
-            is Pattern.Binder -> {
+            is Pattern.BinderPattern -> {
                 this[pattern.id] = BoundIdentifier.ToPatternBinder(pattern)
             }
-            is Pattern.Literal -> {}
-            is Pattern.ListPattern -> pattern.list.forEach(::bind)
+            is Pattern.LiteralPattern -> {}
+            is Pattern.ListPattern -> pattern.elements.forEach(::bind)
             is Pattern.RecordPattern -> pattern.fields.forEach { bind(it.second) }
             is Pattern.CtorPattern -> {
                 pattern.callee.resolved_ = this[pattern.callee.identifier]
                 pattern.args.forEach(::bind)
             }
             is Pattern.TypeAnnotatedPattern -> {
-                bind(pattern.inside)
+                bind(pattern.pattern)
                 bind(pattern.annotatedType)
             }
             else -> throw Exception("Unhandled ast node $pattern")

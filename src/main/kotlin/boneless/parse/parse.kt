@@ -82,6 +82,11 @@ class Parser(private val inputAsText: String, private val tokens: List<Tokenizer
         return id.payload!!
     }
 
+    private fun acceptNumericalLiteral(): String? {
+        val id = acceptToken("NumLit")
+        return id?.payload
+    }
+
     private fun eatIdentifier(): String {
         val id = eat("Identifier")
         return id.payload!!
@@ -102,7 +107,7 @@ class Parser(private val inputAsText: String, private val tokens: List<Tokenizer
                     expect("=")
                     val rhs = acceptExpression(0) ?: unexpectedToken("expression")
                     expect(";")
-                    instructions += Instruction.Let(ptrn, false, rhs)
+                    instructions += Instruction.Let(ptrn, rhs)
                 }
                 else -> {
                     yieldValue = acceptExpression(0) ?: break
@@ -245,10 +250,8 @@ class Parser(private val inputAsText: String, private val tokens: List<Tokenizer
                     return Type.TupleType(elems)
                 }
                 accept("..") -> {
-                    return Type.ArrayType(base, 0)
-                }
-                accept("^") -> {
-                    val size = expectNumericalLiteral().toIntOrNull()
+                    val num = acceptNumericalLiteral() ?: return Type.ArrayType(base, 0)
+                    val size = num.toIntOrNull()
                     if (size == null || size <= 0)
                         expected("non-zero integer number")
                     return Type.ArrayType(base, size)
@@ -265,15 +268,15 @@ class Parser(private val inputAsText: String, private val tokens: List<Tokenizer
     private fun eatExpressionParenthesisInsides(endToken: String): Expression {
         // This is the empty tuple
         if (accept(endToken))
-            return Expression.QuoteValue(
-                Value.ListLiteral(
+            return Expression.QuoteLiteral(
+                Literal.ListLiteral(
                     emptyList()
                 )
             )
 
         val firstExpression = acceptExpression(0)!!
         if (firstExpression is Expression.IdentifierRef && accept("=")) {
-            val firstId = firstExpression.referenced.identifier
+            val firstId = firstExpression.id.identifier
             // this is a record !
             val fields = mutableListOf(Pair(firstId, acceptExpression(0)!!))
             while (true) {
@@ -310,14 +313,14 @@ class Parser(private val inputAsText: String, private val tokens: List<Tokenizer
     private fun acceptPrimaryExpression(): Expression? {
         when {
             front.tokenName == "StringLit" -> {
-                val nom = eat(); return Expression.QuoteValue(
-                    Value.StrLiteral(
+                val nom = eat(); return Expression.QuoteLiteral(
+                    Literal.StrLiteral(
                         nom.payload!!
                     )
                 ); }
             front.tokenName == "NumLit" -> {
-                val nom = eat(); return Expression.QuoteValue(
-                    Value.NumLiteral(
+                val nom = eat(); return Expression.QuoteLiteral(
+                    Literal.NumLiteral(
                         nom.payload!!
                     )
                 ); }
@@ -459,10 +462,10 @@ class Parser(private val inputAsText: String, private val tokens: List<Tokenizer
     private fun eatPatternParenthesisInsides(endToken: String): Pattern {
         // This is the empty tuple
         if (accept(endToken))
-            return Pattern.Literal(Value.ListLiteral(emptyList()))
+            return Pattern.LiteralPattern(Literal.ListLiteral(emptyList()))
 
         val firstExpression = eatPattern()
-        if (firstExpression is Pattern.Binder && accept("=")) {
+        if (firstExpression is Pattern.BinderPattern && accept("=")) {
             val firstId = firstExpression.id
             // this is a record !
             val fields = mutableListOf(Pair(firstId, eatPattern()))
@@ -499,20 +502,20 @@ class Parser(private val inputAsText: String, private val tokens: List<Tokenizer
 
     private fun acceptPatternBasic(): Pattern? = when {
         front.tokenName == "StringLit" -> {
-            val nom = eat(); Pattern.Literal(
-                Value.StrLiteral(
+            val nom = eat(); Pattern.LiteralPattern(
+                Literal.StrLiteral(
                     nom.payload!!
                 )
             ); }
         front.tokenName == "NumLit" -> {
-            val nom = eat(); Pattern.Literal(
-                Value.NumLiteral(
+            val nom = eat(); Pattern.LiteralPattern(
+                Literal.NumLiteral(
                     nom.payload!!
                 )
             ); }
         front.tokenName == "Identifier" -> {
             val id = eatIdentifier()
-            Pattern.Binder(id)
+            Pattern.BinderPattern(id)
         }
         accept("(") -> {
             eatPatternParenthesisInsides(")")
@@ -523,7 +526,7 @@ class Parser(private val inputAsText: String, private val tokens: List<Tokenizer
 
     private fun eatPattern(): Pattern {
         val pattern = acceptPatternBasic() ?: expected("literal or list or dictionary or ctor pattern")
-        if (pattern is Pattern.Binder) {
+        if (pattern is Pattern.BinderPattern) {
             val args = mutableListOf<Pattern>()
             while (true) {
                 val arg = acceptPatternBasic() ?: break
