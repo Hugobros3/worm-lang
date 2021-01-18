@@ -1,6 +1,6 @@
 package boneless.classfile
 
-import boneless.classfile.ConstantPoolEntryInfo.*
+import boneless.classfile.ConstantPoolData.*
 import java.io.File
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
@@ -106,10 +106,8 @@ class ClassFileReader(val file: File) {
         //println(major)
         //println(constant_pool_count)
 
-        var cpe = 1
-        val constant_pool = listOf(ConstantPoolEntry(CpInfoTags.Dummy, ConstantPoolEntryInfo.Dummy)) + (readN(constant_pool_count.toInt() - 1) {
+        val constant_pool = listOf(dummyCPEntry) + (readN(constant_pool_count.toInt() - 1) {
             val entry = readCpInfo()
-            //println("entry ${cpe++} $entry")
             entry
         })
         //println("read cpool !")
@@ -149,32 +147,32 @@ class ClassFileReader(val file: File) {
 
     fun readCpInfo(): ConstantPoolEntry {
         val tagByte = readByte().toInt()
-        val tag = CpInfoTags.values().find { it.tagByte == tagByte } ?: throw Exception("Unknown constant pool entry tag: $tagByte")
+        val tag = ConstantPoolTag.values().find { it.tagByte == tagByte } ?: throw Exception("Unknown constant pool entry tag: $tagByte")
         val info = when (tag) {
-            CpInfoTags.Class -> ClassInfo(readShort())
-            CpInfoTags.FieldRef -> FieldRefInfo(readShort(), readShort())
-            CpInfoTags.MethodRef -> MethodRefInfo(readShort(), readShort())
-            CpInfoTags.InterfaceMethodRef -> InterfaceRefInfo(readShort(), readShort())
-            CpInfoTags.String -> StringInfo(readShort())
-            CpInfoTags.Integer -> IntegerInfo(readInt())
-            CpInfoTags.Float -> FloatInfo(readFloat())
-            CpInfoTags.Long -> LongInfo(readLong())
-            CpInfoTags.Double -> DoubleInfo(readDouble())
-            CpInfoTags.NameAndType -> NameAndTypeInfo(readShort(), readShort())
-            CpInfoTags.Utf8 -> {
+            ConstantPoolTag.Class -> ClassInfo(readShort())
+            ConstantPoolTag.FieldRef -> FieldRefInfo(readShort(), readShort())
+            ConstantPoolTag.MethodRef -> MethodRefInfo(readShort(), readShort())
+            ConstantPoolTag.InterfaceMethodRef -> InterfaceRefInfo(readShort(), readShort())
+            ConstantPoolTag.String -> StringInfo(readShort())
+            ConstantPoolTag.Integer -> IntegerInfo(readInt())
+            ConstantPoolTag.Float -> FloatInfo(readFloat())
+            ConstantPoolTag.Long -> LongInfo(readLong())
+            ConstantPoolTag.Double -> DoubleInfo(readDouble())
+            ConstantPoolTag.NameAndType -> NameAndTypeInfo(readShort(), readShort())
+            ConstantPoolTag.Utf8 -> {
                 val length = readShort().toInt()
                 val bytes = readBytes(length)
                 Utf8Info(String(bytes))
             }
-            CpInfoTags.MethodHandle -> MethodHandleInfo(readByte(), readShort())
-            CpInfoTags.MethodType -> MethodTypeInfo(readShort())
-            CpInfoTags.Dynamic -> DynamicInfo(readShort(), readShort())
-            CpInfoTags.InvokeDynamic -> InvokeDynamicInfo(readShort(), readShort())
-            CpInfoTags.Module -> ModuleInfo(readShort())
-            CpInfoTags.Package -> PackageInfo(readShort())
-            CpInfoTags.Dummy -> throw Exception("lol no")
+            ConstantPoolTag.MethodHandle -> MethodHandleInfo(readByte(), readShort())
+            ConstantPoolTag.MethodType -> MethodTypeInfo(readShort())
+            ConstantPoolTag.Dynamic -> DynamicInfo(readShort(), readShort())
+            ConstantPoolTag.InvokeDynamic -> InvokeDynamicInfo(readShort(), readShort())
+            ConstantPoolTag.Module -> ModuleInfo(readShort())
+            ConstantPoolTag.Package -> PackageInfo(readShort())
+            ConstantPoolTag.Dummy -> throw Exception("lol no")
         }
-        return ConstantPoolEntry(tag, info)
+        return ConstantPoolEntry(/*tag, */info)
     }
 
     fun readFieldInfo(cp: List<ConstantPoolEntry>): FieldInfo {
@@ -225,6 +223,7 @@ fun readClassAccesFlags(flags: Short): ClassAccessFlags {
         acc_public = bit(0x0001),
         acc_final = bit(0x0010),
         acc_super = bit(0x0020),
+        acc_value_type = bit(0x0100),
         acc_interface = bit(0x0200),
         acc_abstract = bit(0x0400),
         acc_synthetic = bit(0x1000),

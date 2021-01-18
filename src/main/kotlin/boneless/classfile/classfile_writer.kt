@@ -79,6 +79,7 @@ class ClassFileWriter(val classFile: ClassFile, val outputStream: DataOutputStre
             bit(0x0001, af.acc_public) or
                     bit(0x0010, af.acc_final) or
                     bit(0x0020, af.acc_super) or
+                    bit(0x0100, af.acc_value_type) or
                     bit(0x0200, af.acc_interface) or
                     bit(0x0400, af.acc_abstract) or
                     bit(0x1000, af.acc_synthetic) or
@@ -122,70 +123,86 @@ class ClassFileWriter(val classFile: ClassFile, val outputStream: DataOutputStre
     }
 
     fun writeCpEntry(entry: ConstantPoolEntry) {
-        if (entry.tag == CpInfoTags.Dummy)
-            return
-        writeByte(entry.tag.tagByte)
-        when (val inf = entry.info) {
-            ConstantPoolEntryInfo.Dummy -> {
+        fun tag(tag: ConstantPoolTag) = writeByte(tag.tagByte)
+
+        when (val inf = entry.data) {
+            ConstantPoolData.Dummy -> {
             }
-            is ConstantPoolEntryInfo.ClassInfo -> {
+            is ConstantPoolData.ClassInfo -> {
+                tag(ConstantPoolTag.Class)
                 writeShort(inf.name_index)
             }
-            is ConstantPoolEntryInfo.FieldRefInfo -> {
+            is ConstantPoolData.FieldRefInfo -> {
+                tag(ConstantPoolTag.FieldRef)
                 writeShort(inf.class_index)
                 writeShort(inf.name_and_type_index)
             }
-            is ConstantPoolEntryInfo.MethodRefInfo -> {
+            is ConstantPoolData.MethodRefInfo -> {
+                tag(ConstantPoolTag.MethodRef)
                 writeShort(inf.class_index)
                 writeShort(inf.name_and_type_index)
             }
-            is ConstantPoolEntryInfo.InterfaceRefInfo -> {
+            is ConstantPoolData.InterfaceRefInfo -> {
+                tag(ConstantPoolTag.InterfaceMethodRef)
                 writeShort(inf.class_index)
                 writeShort(inf.name_and_type_index)
             }
-            is ConstantPoolEntryInfo.StringInfo -> {
+            is ConstantPoolData.StringInfo -> {
+                tag(ConstantPoolTag.String)
                 writeShort(inf.string_index)
             }
-            is ConstantPoolEntryInfo.IntegerInfo -> {
+            is ConstantPoolData.IntegerInfo -> {
+                tag(ConstantPoolTag.Integer)
                 writeInt(inf.int)
             }
-            is ConstantPoolEntryInfo.FloatInfo -> {
+            is ConstantPoolData.FloatInfo -> {
+                tag(ConstantPoolTag.Float)
                 writeFloat(inf.float)
             }
-            is ConstantPoolEntryInfo.LongInfo -> {
+            is ConstantPoolData.LongInfo -> {
+                tag(ConstantPoolTag.Long)
                 writeLong(inf.long)
             }
-            is ConstantPoolEntryInfo.DoubleInfo -> {
+            is ConstantPoolData.DoubleInfo -> {
+                tag(ConstantPoolTag.Double)
                 writeDouble(inf.double)
             }
-            is ConstantPoolEntryInfo.NameAndTypeInfo -> {
+            is ConstantPoolData.NameAndTypeInfo -> {
+                tag(ConstantPoolTag.NameAndType)
                 writeShort(inf.name_index)
                 writeShort(inf.descriptor_index)
             }
-            is ConstantPoolEntryInfo.Utf8Info -> {
+            is ConstantPoolData.Utf8Info -> {
+                tag(ConstantPoolTag.Utf8)
                 val ba = inf.string.toByteArray()
                 writeShort(ba.size)
                 writeBytes(ba)
             }
-            is ConstantPoolEntryInfo.MethodHandleInfo -> {
+            is ConstantPoolData.MethodHandleInfo -> {
+                tag(ConstantPoolTag.MethodHandle)
                 writeByte(inf.reference_kind.toInt())
                 writeShort(inf.reference_index)
             }
-            is ConstantPoolEntryInfo.MethodTypeInfo -> {
+            is ConstantPoolData.MethodTypeInfo -> {
+                tag(ConstantPoolTag.MethodType)
                 writeShort(inf.descriptor_index)
             }
-            is ConstantPoolEntryInfo.DynamicInfo -> {
+            is ConstantPoolData.DynamicInfo -> {
+                tag(ConstantPoolTag.Dynamic)
                 writeShort(inf.boostrap_method_attr_index)
                 writeShort(inf.name_and_type_index)
             }
-            is ConstantPoolEntryInfo.InvokeDynamicInfo -> {
+            is ConstantPoolData.InvokeDynamicInfo -> {
+                tag(ConstantPoolTag.InvokeDynamic)
                 writeShort(inf.boostrap_method_attr_index)
                 writeShort(inf.name_and_type_index)
             }
-            is ConstantPoolEntryInfo.ModuleInfo -> {
+            is ConstantPoolData.ModuleInfo -> {
+                tag(ConstantPoolTag.Module)
                 writeShort(inf.name_index)
             }
-            is ConstantPoolEntryInfo.PackageInfo -> {
+            is ConstantPoolData.PackageInfo -> {
+                tag(ConstantPoolTag.Package)
                 writeShort(inf.name_index)
             }
         }

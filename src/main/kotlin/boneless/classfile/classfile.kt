@@ -25,12 +25,12 @@ data class ClassFile(
 }
 
 fun resolveNameUsingCP(constantPool: List<ConstantPoolEntry>, index: Int): String {
-    val cpe = constantPool[index].info as? ConstantPoolEntryInfo.Utf8Info ?: throw Exception("Malformed class")
+    val cpe = constantPool[index].data as? ConstantPoolData.Utf8Info ?: throw Exception("Malformed class")
     return cpe.string
 }
 
 fun resolveClassNameUsingCP(constantPool: List<ConstantPoolEntry>, index: Int): String {
-    val cpe = constantPool[index].info as? ConstantPoolEntryInfo.ClassInfo ?: throw Exception("Malformed class")
+    val cpe = constantPool[index].data as? ConstantPoolData.ClassInfo ?: throw Exception("Malformed class")
     return resolveNameUsingCP(constantPool, cpe.name_index.toInt())
 }
 
@@ -38,6 +38,8 @@ data class ClassAccessFlags(
     val acc_public: Boolean,
     val acc_final: Boolean,
     val acc_super: Boolean,
+    /** The secret sauce */
+    val acc_value_type: Boolean,
     val acc_interface: Boolean,
     val acc_abstract: Boolean,
     val acc_synthetic: Boolean,
@@ -46,8 +48,11 @@ data class ClassAccessFlags(
     val acc_module: Boolean,
 )
 
-data class ConstantPoolEntry(val tag: CpInfoTags, val info: ConstantPoolEntryInfo)
-enum class CpInfoTags(val tagByte: Int) {
+/** Used for slot zero of the CP */
+val dummyCPEntry = ConstantPoolEntry(/*ConstantPoolTag.Dummy, */ConstantPoolData.Dummy)
+data class ConstantPoolEntry(/*val tag: ConstantPoolTag, */val data: ConstantPoolData)
+enum class ConstantPoolTag(val tagByte: Int) {
+    /** Not a real tag defined by the JVM, used for slot zero */
     Dummy(0xDEADBEEF.toInt()),
 
     Class(7),
@@ -71,34 +76,34 @@ enum class CpInfoTags(val tagByte: Int) {
     Package(20),
 }
 
-sealed class ConstantPoolEntryInfo {
-    object Dummy : ConstantPoolEntryInfo()
+sealed class ConstantPoolData {
+    object Dummy : ConstantPoolData()
 
-    data class ClassInfo(val name_index: Short): ConstantPoolEntryInfo()
+    data class ClassInfo(val name_index: Short): ConstantPoolData()
 
-    data class FieldRefInfo(val class_index: Short, val name_and_type_index: Short): ConstantPoolEntryInfo()
-    data class MethodRefInfo(val class_index: Short, val name_and_type_index: Short): ConstantPoolEntryInfo()
-    data class InterfaceRefInfo(val class_index: Short, val name_and_type_index: Short): ConstantPoolEntryInfo()
+    data class FieldRefInfo(val class_index: Short, val name_and_type_index: Short): ConstantPoolData()
+    data class MethodRefInfo(val class_index: Short, val name_and_type_index: Short): ConstantPoolData()
+    data class InterfaceRefInfo(val class_index: Short, val name_and_type_index: Short): ConstantPoolData()
 
-    data class StringInfo(val string_index: Short): ConstantPoolEntryInfo()
+    data class StringInfo(val string_index: Short): ConstantPoolData()
 
-    data class IntegerInfo(val int: Int): ConstantPoolEntryInfo()
-    data class FloatInfo(val float: Float): ConstantPoolEntryInfo()
+    data class IntegerInfo(val int: Int): ConstantPoolData()
+    data class FloatInfo(val float: Float): ConstantPoolData()
 
-    data class LongInfo(val long: Long): ConstantPoolEntryInfo()
-    data class DoubleInfo(val double: Double): ConstantPoolEntryInfo()
+    data class LongInfo(val long: Long): ConstantPoolData()
+    data class DoubleInfo(val double: Double): ConstantPoolData()
 
-    data class NameAndTypeInfo(val name_index: Short, val descriptor_index: Short): ConstantPoolEntryInfo()
-    data class Utf8Info(val string: String): ConstantPoolEntryInfo()
+    data class NameAndTypeInfo(val name_index: Short, val descriptor_index: Short): ConstantPoolData()
+    data class Utf8Info(val string: String): ConstantPoolData()
 
-    data class MethodHandleInfo(val reference_kind: Byte, val reference_index: Short): ConstantPoolEntryInfo()
-    data class MethodTypeInfo(val descriptor_index: Short): ConstantPoolEntryInfo()
+    data class MethodHandleInfo(val reference_kind: Byte, val reference_index: Short): ConstantPoolData()
+    data class MethodTypeInfo(val descriptor_index: Short): ConstantPoolData()
 
-    data class DynamicInfo(val boostrap_method_attr_index: Short, val name_and_type_index: Short): ConstantPoolEntryInfo()
-    data class InvokeDynamicInfo(val boostrap_method_attr_index: Short, val name_and_type_index: Short): ConstantPoolEntryInfo()
+    data class DynamicInfo(val boostrap_method_attr_index: Short, val name_and_type_index: Short): ConstantPoolData()
+    data class InvokeDynamicInfo(val boostrap_method_attr_index: Short, val name_and_type_index: Short): ConstantPoolData()
 
-    data class ModuleInfo(val name_index: Short): ConstantPoolEntryInfo()
-    data class PackageInfo(val name_index: Short): ConstantPoolEntryInfo()
+    data class ModuleInfo(val name_index: Short): ConstantPoolData()
+    data class PackageInfo(val name_index: Short): ConstantPoolData()
 }
 
 data class FieldInfo(val access_flags: FieldAccessFlags, val name_index: Short, val descriptor_index: Short, val attributes: List<AttributeInfo>)
@@ -144,6 +149,10 @@ sealed class Attribute {
 fun ClassFile.dump() {
     println("Class $name")
     println(accessFlags)
+    var cpe = 0
+    for (entry in constantPool) {
+        println("entry ${cpe++} $entry")
+    }
     println("Methods:")
     fun dumpAttribute(of: String, attribute: AttributeInfo) {
         println("$of attribute " + attribute.name + " :")
