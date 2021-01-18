@@ -2,46 +2,51 @@ package boneless.classfile
 
 import boneless.classfile.JVMComputationalType.*
 import java.io.ByteArrayOutputStream
+import java.io.DataOutputStream
 
-// https://docs.oracle.com/javase/specs/jvms/se11/html/jvms-2.html#jvms-2.11.1-320
-enum class JVMComputationalType {
-    CT_Int,
-    CT_Float,
-    CT_Long,
-    CT_Double,
-    CT_Reference,
-    CT_ReturnAddress
-}
+class BytecodeBuilder(private val classFileBuilder: ClassFileBuilder) {
+    private var max_stack = 0
+    private var max_locals = 0
+    private val baos___ = ByteArrayOutputStream()
+    private val dos = DataOutputStream(baos___)
 
-// https://docs.oracle.com/javase/specs/jvms/se11/html/jvms-2.html#jvms-2.11.1-320
-enum class JVMActualType(val comp: JVMComputationalType, val cat: Int) {
-    // These types are FAKE !
-    AT_Boolean(CT_Int, 1),
-    AT_Byte(CT_Int, 1),
-    AT_Char(CT_Int, 1),
-    AT_Short(CT_Int, 1),
+    private val locals = mutableListOf<JVMComputationalType>()
+    private val stack = mutableListOf<JVMComputationalType>()
 
-    AT_Float(CT_Float, 1),
-    AT_Long(CT_Long, 2),
-    AT_Double(CT_Double, 2),
-    AT_Reference(CT_Reference, 1),
-    AT_ReturnAddress(CT_ReturnAddress, 1)
-}
-
-class BytecodeBuilder() {
-    var max_stack = 0
-    var max_locals = 0
-    val baos = ByteArrayOutputStream()
-
-    val locals = mutableListOf<JVMComputationalType>()
-    val stack = mutableListOf<JVMComputationalType>()
-
-    fun popStack(): JVMComputationalType {
-        return stack.removeAt(stack.size - 1)
+    private fun pushStack(t: JVMComputationalType) {
+        stack.add(t)
+        max_stack = stack.size
+    }
+    private fun popStack(expected: JVMComputationalType): JVMComputationalType {
+        val t = stack.removeAt(stack.size - 1)
+        assert(t == expected)
+        return t
     }
 
-    fun instruction(i: JVMInstruction) {
-        baos.write(i.opcode)
+    private fun instruction(i: JVMInstruction) {
+        dos.writeByte(i.opcode)
+    }
+
+    private fun immediate_byte(byte: Byte) {
+        dos.writeByte(byte.toInt())
+    }
+    private fun immediate_short(short: Short) {
+        dos.writeShort(short.toInt())
+    }
+
+    fun pushInt(num: Int) {
+        when  {
+            num < 256 -> {
+                instruction(JVMInstruction.bipush)
+                immediate_byte(num.toByte())
+            }
+            num < 65536 -> {
+                instruction(JVMInstruction.sipush)
+                immediate_short(num.toShort())
+            }
+            else -> TODO()
+        }
+        pushStack(CT_Int)
     }
 
     fun return_void() {
@@ -49,10 +54,19 @@ class BytecodeBuilder() {
     }
 
     fun return_value(type: JVMActualType) {
-
+        popStack(CT_Int)
+        when(type.comp) {
+            CT_Int -> instruction(JVMInstruction.ireturn)
+            CT_Float -> TODO()
+            CT_Long -> TODO()
+            CT_Double -> TODO()
+            CT_Reference -> TODO()
+            CT_ReturnAddress -> TODO()
+        }
     }
 
     fun finish(): Attribute.Code {
-        return Attribute.Code(max_stack.toShort(), max_locals.toShort(), baos.toByteArray(), emptyList(), emptyList())
+        dos.flush()
+        return Attribute.Code(max_stack.toShort(), max_locals.toShort(), baos___.toByteArray(), emptyList(), emptyList())
     }
 }

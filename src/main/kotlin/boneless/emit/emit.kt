@@ -5,6 +5,7 @@ import boneless.Expression
 import boneless.Literal
 import boneless.Module
 import boneless.classfile.*
+import boneless.type.PrimitiveTypeEnum
 import boneless.type.Type
 import boneless.type.unit_type
 import java.io.File
@@ -23,19 +24,28 @@ class Emitter(val modules: List<Module>, val outputDir: File) {
         }
     }
 
-    fun typeDescriptor(type: Type, is_ret_type: Boolean = false): String = when(type) {
-        is Type.PrimitiveType -> TODO()
-        is Type.TypeApplication -> TODO()
-        is Type.RecordType -> TODO()
-        is Type.TupleType -> if (type.isUnit) {
-            if (is_ret_type) "V" else ""
-        } else {
-            TODO()
+    fun convertFieldType(type: Type): FieldDescriptor? {
+        return when(type) {
+            is Type.PrimitiveType -> when(type.primitiveType) {
+                PrimitiveTypeEnum.Bool -> TODO()
+                PrimitiveTypeEnum.I32 -> FieldDescriptor.BaseType.I
+                PrimitiveTypeEnum.I64 -> TODO()
+                PrimitiveTypeEnum.F32 -> TODO()
+            }
+            is Type.TypeApplication -> TODO()
+            is Type.RecordType -> TODO()
+            is Type.TupleType -> if (type.isUnit) null else TODO()
+            is Type.ArrayType -> TODO()
+            is Type.EnumType -> TODO()
+            is Type.NominalType -> TODO()
+            is Type.FnType -> TODO()
         }
-        is Type.ArrayType -> TODO()
-        is Type.EnumType -> TODO()
-        is Type.NominalType -> TODO()
-        is Type.FnType -> "(${typeDescriptor(type.dom)})${typeDescriptor(type.codom, true)}"
+    }
+
+    fun convertMethodType(fnType: Type.FnType): MethodDescriptor {
+        val dom = convertFieldType(fnType.dom)
+        val codom = if (fnType.codom == unit_type()) ReturnDescriptor.V else ReturnDescriptor.NonVoidDescriptor(convertFieldType(fnType.codom)!!)
+        return MethodDescriptor(listOf(dom).filterNotNull(), codom)
     }
 
     fun emit(module: Module): ClassFile {
@@ -46,9 +56,9 @@ class Emitter(val modules: List<Module>, val outputDir: File) {
                 is Def.DefBody.ExprBody -> TODO()
                 is Def.DefBody.DataCtor -> TODO()
                 is Def.DefBody.FnBody -> {
-                    val descriptor = typeDescriptor(def.type!!)
-                    val code = emit(def.body.fn)
-                    builder.staticMethod(def.identifier, descriptor, code)
+                    val descriptor = convertMethodType(def.type as Type.FnType)
+                    val code = emit(builder, def.body.fn)
+                    builder.staticMethod(def.identifier, descriptor.toString(), code)
                 }
                 is Def.DefBody.TypeAlias -> {}
             }
@@ -57,14 +67,16 @@ class Emitter(val modules: List<Module>, val outputDir: File) {
         return builder.finish()
     }
 
-    private fun emit(fn: Expression.Function): Attribute.Code {
-        val builder = BytecodeBuilder()
+    private fun emit(cfBuilder: ClassFileBuilder, fn: Expression.Function): Attribute.Code {
+        val builder = BytecodeBuilder(cfBuilder)
+
+        val fnType = fn.type as Type.FnType
 
         emit(builder, fn.body)
         if (fn.body.type!! == unit_type()) {
             builder.return_void()
         } else {
-            TODO()
+            builder.return_value(convertFieldType(fnType.codom)!!.toActualJVMType())
         }
 
         return builder.finish()
@@ -89,7 +101,16 @@ class Emitter(val modules: List<Module>, val outputDir: File) {
 
     private fun emit(builder: BytecodeBuilder, literal: Literal) {
         when (literal) {
-            is Literal.NumLiteral -> TODO()
+            is Literal.NumLiteral -> {
+                when((literal.type as Type.PrimitiveType).primitiveType) {
+                    PrimitiveTypeEnum.Bool -> TODO()
+                    PrimitiveTypeEnum.I32 -> {
+                        builder.pushInt(literal.number.toInt())
+                    }
+                    PrimitiveTypeEnum.I64 -> TODO()
+                    PrimitiveTypeEnum.F32 -> TODO()
+                }
+            }
             is Literal.StrLiteral -> TODO()
             is Literal.ListLiteral -> if(literal.isUnit) {
                 // put nothing on the stack

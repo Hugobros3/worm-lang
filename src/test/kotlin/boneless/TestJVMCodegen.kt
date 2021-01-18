@@ -10,10 +10,10 @@ import java.io.File
 
 class TestJVMCodegen {
 
-    private fun module(str: String): Module {
+    private fun module(moduleName: String, str: String): Module {
         val parser =
             Parser(str, Tokenizer(str).tokenize())
-        val module = parser.parseModule()
+        val module = parser.parseModule(moduleName)
         bind(module)
         type(module)
 
@@ -24,8 +24,18 @@ class TestJVMCodegen {
 
     @Test
     fun testEmitVoidModule() {
-        val mod = module("""
+        val mod = module("VoidFn","""
             fn f() => ();
+        """.trimIndent())
+
+        val outputDir = File("test_out/")
+        emit(mod, outputDir)
+    }
+
+    @Test
+    fun testEmitIntModule() {
+        val mod = module("IntFn","""
+            fn f() => 42;
         """.trimIndent())
 
         val outputDir = File("test_out/")
