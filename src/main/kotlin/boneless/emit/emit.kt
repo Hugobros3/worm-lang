@@ -39,7 +39,7 @@ class Emitter(val modules: List<Module>, val outputDir: File) {
     }
 
     fun emit(module: Module): ClassFile {
-        val builder = ClassFileBuilder(className = "DefaultModule")
+        val builder = ClassFileBuilder(className = module.name)
 
         for (def in module.defs) {
             when(def.body) {

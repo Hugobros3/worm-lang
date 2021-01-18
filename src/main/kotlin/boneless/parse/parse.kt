@@ -122,7 +122,7 @@ class Parser(private val inputAsText: String, private val tokens: List<Tokenizer
         return Expression.Sequence(instructions, yieldValue)
     }
 
-    private fun expectModule(): Module {
+    private fun expectModule(moduleName: String): Module {
         val defs = mutableListOf<Def>()
         while (true) {
             if (accept("data")) {
@@ -171,7 +171,7 @@ class Parser(private val inputAsText: String, private val tokens: List<Tokenizer
                 expect(";")
             } else break
         }
-        return Module(defs.toSet())
+        return Module(moduleName, defs.toSet())
     }
 
     private fun acceptTypeAnnotation(): Type? {
@@ -552,8 +552,8 @@ class Parser(private val inputAsText: String, private val tokens: List<Tokenizer
         return pattern
     }
 
-    fun parseModule(): Module {
-        val module = expectModule()
+    fun parseModule(moduleName: String = "DefaultModule"): Module {
+        val module = expectModule(moduleName)
         expect("EOF")
         return module
     }

@@ -23,7 +23,7 @@ class Tokenizer(val input: String) {
     }
 
     fun accept(str: String): Boolean {
-        if (i + str.length > input.length || !input.substring(i).startsWith(str))
+        if (i + str.length > input.length || !input.substring(i).startsWith(str) || (str.last().canMakeUpIdentifier() && i + str.length < input.length && input[i + str.length].canMakeUpIdentifier()))
             return false
         i += str.length
         return true

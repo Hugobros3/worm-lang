@@ -7,7 +7,7 @@ import boneless.type.typeable
 
 typealias Identifier = String
 
-data class Module(val defs: Set<Def>)
+data class Module(val name: Identifier, val defs: Set<Def>)
 data class Def(val identifier: Identifier, val body: DefBody) : Typeable by typeable() {
     sealed class DefBody {
         data class ExprBody(val expr: Expression, val annotatedType: Type?): DefBody()
