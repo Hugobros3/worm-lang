@@ -121,7 +121,6 @@ data class FieldAccessFlags(
 )
 
 data class MethodInfo(val access_flags: MethodAccessFlags, val name_index: Short, val descriptor_index: Short, val attributes: List<AttributeInfo>)
-
 data class MethodAccessFlags(
     val acc_public: Boolean,
     val acc_private: Boolean,

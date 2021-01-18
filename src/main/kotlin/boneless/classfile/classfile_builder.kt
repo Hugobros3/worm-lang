@@ -13,11 +13,26 @@ val defaultClassAccessFlags = ClassAccessFlags(
     acc_module = false,
 )
 
+val defaulMethodAccessFlags = MethodAccessFlags(
+    acc_public = true,
+    acc_private = false,
+    acc_protected = false,
+    acc_static = true,
+    acc_final = true,
+    acc_synchronized = false,
+    acc_bridge = false,
+    acc_varargs = false,
+    acc_native = false,
+    acc_abstract = false,
+    acc_strict = false,
+    acc_synthetic = false,
+)
+
 val lw2jvm = JavaVersion(minor = 0, major = 58)
 
 class ClassFileBuilder(val version: JavaVersion = lw2jvm, val className: String, val superName: String = "java.lang.Object") {
-    //private var classFile = ClassFile(version, emptyList(), defaultClassAccessFlags, -1, -1, emptyList(), emptyList(), emptyList(), emptyList())
     val constantPool = mutableListOf<ConstantPoolEntry>(dummyCPEntry)
+    val methods = mutableListOf<MethodInfo>()
 
     inline fun <reified E: ConstantPoolData> findOrPutInCPool(check: (E) -> Boolean, create: () -> E): Short {
         for ((i, entry) in constantPool.withIndex()) {
@@ -37,9 +52,15 @@ class ClassFileBuilder(val version: JavaVersion = lw2jvm, val className: String,
         return findOrPutInCPool({ it.name_index == index }){ ConstantPoolData.ClassInfo(index)}
     }
 
+    fun staticMethod(methodName: String, descriptor: String, code: Attribute.Code) {
+        val nameIndex = constantUTF(methodName)
+        val descriptor_index = constantUTF(descriptor)
+        methods.add(MethodInfo(defaulMethodAccessFlags, nameIndex, descriptor_index, listOf(AttributeInfo(constantUTF("Code"), interpreted = code, uninterpreted = null))))
+    }
+
     fun finish(): ClassFile {
         val thisIndex = constantClass(className)
         val superIndex = constantClass(superName)
-        return ClassFile(version, constantPool, defaultClassAccessFlags, thisIndex, superIndex, emptyList(), emptyList(), emptyList(), emptyList())
+        return ClassFile(version, constantPool, defaultClassAccessFlags, thisIndex, superIndex, emptyList(), emptyList(), methods, emptyList())
     }
 }
