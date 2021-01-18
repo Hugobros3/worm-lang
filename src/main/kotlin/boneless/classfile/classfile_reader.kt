@@ -136,7 +136,7 @@ class ClassFileReader(val file: File) {
 
         assert(pos == bytes.size)
 
-        return ClassFile(JavaVersion(major.toInt(), minor.toInt()), constant_pool, access_flags, this_class, super_class, interfaces, fields, methods, attributes)
+        return ClassFile(JavaVersion(major.toInt(), minor.toInt()), constant_pool, readClassAccesFlags(access_flags), this_class, super_class, interfaces, fields, methods, attributes)
     }
 
     fun readAttributes(cp: List<ConstantPoolEntry>): List<AttributeInfo> {
@@ -182,7 +182,7 @@ class ClassFileReader(val file: File) {
         val name_index = readShort()
         val descriptor_index = readShort()
 
-        return FieldInfo(access_flags, name_index, descriptor_index, readAttributes(cp))
+        return FieldInfo(readFieldAccesFlags(access_flags), name_index, descriptor_index, readAttributes(cp))
     }
 
     fun readMethodInfo(cp: List<ConstantPoolEntry>): MethodInfo {
@@ -190,7 +190,7 @@ class ClassFileReader(val file: File) {
         val name_index = readShort()
         val descriptor_index = readShort()
 
-        return MethodInfo(access_flags, name_index, descriptor_index, readAttributes(cp))
+        return MethodInfo(readMethodAccesFlags(access_flags), name_index, descriptor_index, readAttributes(cp))
     }
 
     fun readAttributeInfo(cp: List<ConstantPoolEntry>): AttributeInfo {
@@ -217,6 +217,54 @@ class ClassFileReader(val file: File) {
         }
         return AttributeInfo(attribute_name_index, info, interp)
     }
+}
+
+fun readClassAccesFlags(flags: Short): ClassAccessFlags {
+    fun bit(m: Int) = (flags.toInt() and m) != 0
+    return ClassAccessFlags(
+        acc_public = bit(0x0001),
+        acc_final = bit(0x0010),
+        acc_super = bit(0x0020),
+        acc_interface = bit(0x0200),
+        acc_abstract = bit(0x0400),
+        acc_synthetic = bit(0x1000),
+        acc_annotation = bit(0x2000),
+        acc_enum = bit(0x4000),
+        acc_module = bit(0x8000),
+    )
+}
+
+fun readFieldAccesFlags(flags: Short): FieldAccessFlags {
+    fun bit(m: Int) = (flags.toInt() and m) != 0
+    return FieldAccessFlags(
+        acc_public = bit(0x0001),
+        acc_private = bit(0x0002),
+        acc_protected = bit(0x0004),
+        acc_static = bit(0x0008),
+        acc_final = bit(0x0010),
+        acc_volatile = bit(0x0040),
+        acc_transient = bit(0x0080),
+        acc_synthetic = bit(0x1000),
+        acc_enum = bit(0x4000),
+    )
+}
+
+fun readMethodAccesFlags(flags: Short): MethodAccessFlags {
+    fun bit(m: Int) = (flags.toInt() and m) != 0
+    return MethodAccessFlags(
+        acc_public = bit(0x0001),
+        acc_private = bit(0x0002),
+        acc_protected = bit(0x0004),
+        acc_static = bit(0x0008),
+        acc_final = bit(0x0010),
+        acc_synchronized = bit(0x0020),
+        acc_bridge = bit(0x0040),
+        acc_varargs = bit(0x0080),
+        acc_native = bit(0x0100),
+        acc_abstract = bit(0x0400),
+        acc_strict = bit(0x0800),
+        acc_synthetic = bit(0x1000),
+    )
 }
 
 fun readClassfile(file: File) = ClassFileReader(file).read()

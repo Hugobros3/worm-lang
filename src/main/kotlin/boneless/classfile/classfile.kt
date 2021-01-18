@@ -5,7 +5,7 @@ data class JavaVersion(val major: Int, val minor: Int)
 data class ClassFile(
     val version: JavaVersion,
     val constantPool: List<ConstantPoolEntry>,
-    val accessFlags: Short,
+    val accessFlags: ClassAccessFlags,
     val thisClass: Short,
     val superClass: Short,
     val interfaces: List<Short>,
@@ -33,6 +33,18 @@ fun resolveClassNameUsingCP(constantPool: List<ConstantPoolEntry>, index: Int): 
     val cpe = constantPool[index].info as? ConstantPoolEntryInfo.ClassInfo ?: throw Exception("Malformed class")
     return resolveNameUsingCP(constantPool, cpe.name_index.toInt())
 }
+
+data class ClassAccessFlags(
+    val acc_public: Boolean,
+    val acc_final: Boolean,
+    val acc_super: Boolean,
+    val acc_interface: Boolean,
+    val acc_abstract: Boolean,
+    val acc_synthetic: Boolean,
+    val acc_annotation: Boolean,
+    val acc_enum: Boolean,
+    val acc_module: Boolean,
+)
 
 data class ConstantPoolEntry(val tag: CpInfoTags, val info: ConstantPoolEntryInfo)
 enum class CpInfoTags(val tagByte: Int) {
@@ -89,8 +101,36 @@ sealed class ConstantPoolEntryInfo {
     data class PackageInfo(val name_index: Short): ConstantPoolEntryInfo()
 }
 
-data class FieldInfo(val access_flags: Short, val name_index: Short, val descriptor_index: Short, val attributes: List<AttributeInfo>)
-data class MethodInfo(val access_flags: Short, val name_index: Short, val descriptor_index: Short, val attributes: List<AttributeInfo>)
+data class FieldInfo(val access_flags: FieldAccessFlags, val name_index: Short, val descriptor_index: Short, val attributes: List<AttributeInfo>)
+
+data class FieldAccessFlags(
+    val acc_public: Boolean,
+    val acc_private: Boolean,
+    val acc_protected: Boolean,
+    val acc_static: Boolean,
+    val acc_final: Boolean,
+    val acc_volatile: Boolean,
+    val acc_transient: Boolean,
+    val acc_synthetic: Boolean,
+    val acc_enum: Boolean,
+)
+
+data class MethodInfo(val access_flags: MethodAccessFlags, val name_index: Short, val descriptor_index: Short, val attributes: List<AttributeInfo>)
+
+data class MethodAccessFlags(
+    val acc_public: Boolean,
+    val acc_private: Boolean,
+    val acc_protected: Boolean,
+    val acc_static: Boolean,
+    val acc_final: Boolean,
+    val acc_synchronized: Boolean,
+    val acc_bridge: Boolean,
+    val acc_varargs: Boolean,
+    val acc_native: Boolean,
+    val acc_abstract: Boolean,
+    val acc_strict: Boolean,
+    val acc_synthetic: Boolean,
+)
 
 data class AttributeInfo(val attribute_name_index: Short, val uninterpreted: ByteArray?, val interpreted: Attribute?)
 
@@ -103,12 +143,16 @@ sealed class Attribute {
 
 fun ClassFile.dump() {
     println("Class $name")
+    println(accessFlags)
     println("Methods:")
-    fun dumpAttribute(attribute: AttributeInfo) {
-        println("attribute " + attribute.name + " :")
+    fun dumpAttribute(of: String, attribute: AttributeInfo) {
+        println("$of attribute " + attribute.name + " :")
         when (attribute.interpreted) {
             is Attribute.Code -> {
                 dump_bytecode(attribute.interpreted.code, constantPool)
+                for (a in attribute.interpreted.attributes) {
+                    dumpAttribute("code", a)
+                }
             }
         }
         if (attribute.uninterpreted != null) {
@@ -117,19 +161,19 @@ fun ClassFile.dump() {
     }
 
     for (attribute in attributes)
-        dumpAttribute(attribute)
+        dumpAttribute("class", attribute)
 
     for (field in fields) {
         println("Field: " + field.name)
         for (attribute in field.attributes) {
-            dumpAttribute(attribute)
+            dumpAttribute("field", attribute)
         }
     }
 
     for (method in methods) {
         println("Method: " + method.name)
         for (attribute in method.attributes) {
-            dumpAttribute(attribute)
+            dumpAttribute("method", attribute)
         }
     }
 }
