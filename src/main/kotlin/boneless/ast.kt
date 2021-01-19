@@ -63,7 +63,7 @@ sealed class Expression : Typeable by typeable() {
     data class Ascription(val expr: Expression, val ascribedType: Type) : Expression()
     data class Cast(val expr: Expression, val destinationType: Type) : Expression()
 
-    data class Sequence(val instructions: List<Instruction>, val yieldValue: Expression?) : Expression()
+    data class Sequence(val instructions: List<Instruction>, val yieldExpression: Expression?) : Expression()
     data class Conditional(val condition: Expression, val ifTrue: Expression, val ifFalse: Expression) : Expression()
     data class WhileLoop(val loopCondition: Expression, val body: Expression) : Expression()
 }

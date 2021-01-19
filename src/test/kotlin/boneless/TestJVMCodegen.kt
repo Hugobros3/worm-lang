@@ -41,4 +41,27 @@ class TestJVMCodegen {
         val outputDir = File("test_out/")
         emit(mod, outputDir)
     }
+
+    @Test
+    fun testEmitIntIntModule() {
+        val mod = module("IntIntFn","""
+            fn f(i: I32) => i;
+        """.trimIndent())
+
+        val outputDir = File("test_out/")
+        emit(mod, outputDir)
+    }
+
+    @Test
+    fun testEmitLetBasicModule() {
+        val mod = module("EmitLetBasic","""
+            fn f() => {
+                let nice = 69;
+                nice
+            };
+        """.trimIndent())
+
+        val outputDir = File("test_out/")
+        emit(mod, outputDir)
+    }
 }

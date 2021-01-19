@@ -173,10 +173,10 @@ class TypeChecker(val module: Module) {
             is Expression.Sequence -> {
                 for (inst in expr.instructions)
                     typeInstruction(inst)
-                if (expr.yieldValue == null)
+                if (expr.yieldExpression == null)
                     unit_type()
                 else
-                    infer(expr.yieldValue)
+                    infer(expr.yieldExpression)
             }
             is Expression.Conditional -> {
                 check(expr.condition, Type.PrimitiveType(PrimitiveTypeEnum.Bool))
@@ -237,10 +237,10 @@ class TypeChecker(val module: Module) {
             is Expression.Sequence -> {
                 for (inst in expr.instructions)
                     typeInstruction(inst)
-                if (expr.yieldValue == null) {
+                if (expr.yieldExpression == null) {
                     expect(unit_type(), expected_type); expected_type
                 } else
-                    check(expr.yieldValue, expected_type)
+                    check(expr.yieldExpression, expected_type)
             }
             is Expression.Conditional -> TODO()
             is Expression.WhileLoop -> TODO()

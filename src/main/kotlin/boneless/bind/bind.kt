@@ -109,8 +109,8 @@ class BindHelper(private val module: Module) {
                 push()
                 for (i in expr.instructions)
                     bind(i)
-                if(expr.yieldValue != null)
-                    bind(expr.yieldValue)
+                if(expr.yieldExpression != null)
+                    bind(expr.yieldExpression)
                 pop()
             }
             is Expression.IdentifierRef -> {

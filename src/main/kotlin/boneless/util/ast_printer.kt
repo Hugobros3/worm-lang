@@ -80,8 +80,8 @@ private class PrettyPrinter(val resugarizePrefixAndInfixSymbols: Boolean = true,
             }
             is Expression.ListExpression -> "(" + elements.joinToString(", ") { it.print() } + ")"
             is Expression.RecordExpression -> "(" + fields.map { (id, e) -> "$id = ${e.print()}" }.joinToString(", ") + ")"
-            is Expression.Sequence -> "{\n" + instructions.joinToString("") { shift(it.print()) + "\n" } + if (yieldValue != null) (shift(
-                yieldValue.print(0)
+            is Expression.Sequence -> "{\n" + instructions.joinToString("") { shift(it.print()) + "\n" } + if (yieldExpression != null) (shift(
+                yieldExpression.print(0)
             ) + "\n") else "" + "}"
             is Expression.Function -> {
                 if (returnTypeAnnotation == null)
