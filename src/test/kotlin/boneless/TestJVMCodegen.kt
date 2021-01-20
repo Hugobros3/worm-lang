@@ -64,4 +64,18 @@ class TestJVMCodegen {
         val outputDir = File("test_out/")
         emit(mod, outputDir)
     }
+
+    @Test
+    fun testValueTypeTupleModule() {
+        val mod = module("ValueTypeTuple","""
+            type Pair = [I32, I32];
+            fn f() => {
+                let pair = (2, 3);
+                pair
+            };
+        """.trimIndent())
+
+        val outputDir = File("test_out/")
+        emit(mod, outputDir)
+    }
 }

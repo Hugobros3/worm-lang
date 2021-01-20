@@ -67,7 +67,7 @@ enum class JVMComputationalType {
 }
 
 // https://docs.oracle.com/javase/specs/jvms/se11/html/jvms-2.html#jvms-2.11.1-320
-enum class JVMActualType(val comp: JVMComputationalType, val cat: Int) {
+enum class JVMActualType(val asComputationalType: JVMComputationalType, val cat: Int) {
     // These types are FAKE !
     AT_Boolean(CT_Int, 1),
     AT_Byte(CT_Int, 1),

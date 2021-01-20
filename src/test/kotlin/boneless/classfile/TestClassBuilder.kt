@@ -12,7 +12,7 @@ class TestClassBuilder {
 
     @Test
     fun testClassBuilder() {
-        val builder = ClassFileBuilder(className = "GeneratedTestClass")
+        val builder = ClassFileBuilder(className = "GeneratedTestClass", accessFlags = moduleClassAccessFlags)
         val cf = builder.finish()
         cf.dump()
         writeClassFile(cf, File("${outputDir.absoluteFile}/GeneratedTestClass.class"))

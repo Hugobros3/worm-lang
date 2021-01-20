@@ -16,7 +16,7 @@ class BytecodeBuilder(private val classFileBuilder: ClassFileBuilder) {
 
     private fun pushStack(t: JVMComputationalType) {
         stack.add(t)
-        max_stack = stack.size
+        max_stack = max(max_stack, stack.size)
     }
     private fun popStack(expected: JVMComputationalType): JVMComputationalType {
         val t = stack.removeAt(stack.size - 1)
@@ -61,7 +61,18 @@ class BytecodeBuilder(private val classFileBuilder: ClassFileBuilder) {
             CT_Float -> TODO()
             CT_Long -> TODO()
             CT_Double -> TODO()
-            CT_Reference -> TODO()
+            CT_Reference -> {
+                when(i) {
+                    0 -> instruction(JVMInstruction.aload_0)
+                    1 -> instruction(JVMInstruction.aload_1)
+                    2 -> instruction(JVMInstruction.aload_2)
+                    3 -> instruction(JVMInstruction.aload_3)
+                    else -> {
+                        instruction(JVMInstruction.aload)
+                        immediate_byte(i.toByte())
+                    }
+                }
+            }
             CT_ReturnAddress -> TODO()
         }
         pushStack(t)
@@ -87,7 +98,18 @@ class BytecodeBuilder(private val classFileBuilder: ClassFileBuilder) {
             CT_Float -> TODO()
             CT_Long -> TODO()
             CT_Double -> TODO()
-            CT_Reference -> TODO()
+            CT_Reference -> {
+                when(i) {
+                    0 -> instruction(JVMInstruction.astore_0)
+                    1 -> instruction(JVMInstruction.astore_1)
+                    2 -> instruction(JVMInstruction.astore_2)
+                    3 -> instruction(JVMInstruction.astore_3)
+                    else -> {
+                        instruction(JVMInstruction.astore)
+                        immediate_byte(i.toByte())
+                    }
+                }
+            }
             CT_ReturnAddress -> TODO()
         }
         popStack(t)
@@ -114,19 +136,44 @@ class BytecodeBuilder(private val classFileBuilder: ClassFileBuilder) {
         pushStack(CT_Int)
     }
 
+    fun pushDefaultValueType(className: String) {
+        instruction(JVMInstruction.defaultvalue)
+        immediate_short(classFileBuilder.constantClass(className))
+        pushStack(CT_Reference)
+    }
+
+    fun mutateSetFieldName(className: String, fieldName: String, fieldDescriptor: FieldDescriptor) {
+        popStack(fieldDescriptor.toActualJVMType().asComputationalType)
+        popStack(CT_Reference)
+        instruction(JVMInstruction.withfield)
+        immediate_short(classFileBuilder.constantFieldRef(className, fieldName, fieldDescriptor))
+        pushStack(CT_Reference)
+    }
+
     fun return_void() {
         instruction(JVMInstruction.`return`)
     }
 
     fun return_value(type: JVMActualType) {
-        popStack(CT_Int)
-        when(type.comp) {
+        popStack(type.asComputationalType)
+        when(type.asComputationalType) {
             CT_Int -> instruction(JVMInstruction.ireturn)
             CT_Float -> TODO()
             CT_Long -> TODO()
             CT_Double -> TODO()
-            CT_Reference -> TODO()
-            CT_ReturnAddress -> TODO()
+            CT_Reference -> instruction(JVMInstruction.areturn)
+            CT_ReturnAddress -> throw Exception("Illegal")
+        }
+    }
+
+    fun callStatic(className: String, methodName: String, methodDescriptor: MethodDescriptor) {
+        for (fd in methodDescriptor.dom.reversed()) {
+            popStack(fd.toActualJVMType().asComputationalType)
+        }
+        instruction(JVMInstruction.invokestatic)
+        immediate_short(classFileBuilder.constantMethodRef(className, methodName, methodDescriptor))
+        if (methodDescriptor.codom is ReturnDescriptor.NonVoidDescriptor) {
+            pushStack(methodDescriptor.codom.fieldType.toActualJVMType().asComputationalType)
         }
     }
 
