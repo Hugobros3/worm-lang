@@ -66,12 +66,39 @@ class TestJVMCodegen {
     }
 
     @Test
-    fun testValueTypeTupleModule() {
-        val mod = module("ValueTypeTuple","""
-            type Pair = [I32, I32];
+    fun testTupleBasic() {
+        val mod = module("TupleBasic","""
             fn f() => {
                 let pair = (2, 3);
                 pair
+            };
+        """.trimIndent())
+
+        val outputDir = File("test_out/")
+        emit(mod, outputDir)
+    }
+
+    @Test
+    fun testExtractTuple() {
+        val mod = module("ExtractTuple","""
+            type Pair = [I32, I32];
+            fn f(pair: Pair) => {
+                let (x, y) = pair;
+                x
+            };
+        """.trimIndent())
+
+        val outputDir = File("test_out/")
+        emit(mod, outputDir)
+    }
+
+    @Test
+    fun testExtractComplicated() {
+        val mod = module("ExtractComplicated","""
+            fn f() => {
+                let big = ((0, 4, 5, 1), (), (9999));
+                let ((a, b, c, d), x, z) = big;
+                (z, (d, a, b))
             };
         """.trimIndent())
 

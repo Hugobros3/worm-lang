@@ -166,6 +166,13 @@ class BytecodeBuilder(private val classFileBuilder: ClassFileBuilder) {
         }
     }
 
+    fun getField(className: String, fieldName: String, fieldDescriptor: FieldDescriptor) {
+        popStack(CT_Reference)
+        instruction(JVMInstruction.getfield)
+        immediate_short(classFileBuilder.constantFieldRef(className, fieldName, fieldDescriptor))
+        pushStack(fieldDescriptor.toActualJVMType().asComputationalType)
+    }
+
     fun callStatic(className: String, methodName: String, methodDescriptor: MethodDescriptor) {
         for (fd in methodDescriptor.dom.reversed()) {
             popStack(fd.toActualJVMType().asComputationalType)
