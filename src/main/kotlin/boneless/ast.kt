@@ -54,11 +54,11 @@ sealed class Expression : Typeable by typeable() {
 
     data class IdentifierRef(val id: BindPoint) : Expression()
 
-    data class ListExpression(val elements: List<Expression>) : Expression()
+    data class ListExpression(val elements: List<Expression>, val is_synthesized_invocation_argument_list: Boolean = false) : Expression()
     data class RecordExpression(val fields: List<Pair<Identifier, Expression>>) : Expression()
 
-    data class Invocation(val callee: Expression, val args: List<Expression>) : Expression()
-    data class Function(val parameters: Pattern, val body: Expression, val returnTypeAnnotation: Type? = null) : Expression()
+    data class Invocation(val callee: Expression, val arg: Expression) : Expression()
+    data class Function(val param: Pattern, val body: Expression, val returnTypeAnnotation: Type? = null) : Expression()
 
     data class Ascription(val expr: Expression, val ascribedType: Type) : Expression()
     data class Cast(val expr: Expression, val destinationType: Type) : Expression()

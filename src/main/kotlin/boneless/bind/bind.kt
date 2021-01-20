@@ -88,7 +88,7 @@ class BindHelper(private val module: Module) {
 
             is Expression.ListExpression -> expr.elements.forEach(::bind)
             is Expression.RecordExpression -> expr.fields.forEach { bind(it.second) }
-            is Expression.Invocation -> { bind(expr.callee) ; expr.args.forEach(::bind) }
+            is Expression.Invocation -> { bind(expr.callee) ; bind(expr.arg) }
 
             is Expression.Conditional -> {
                 bind(expr.condition)
@@ -101,7 +101,7 @@ class BindHelper(private val module: Module) {
             }
             is Expression.Function -> {
                 push()
-                bind(expr.parameters)
+                bind(expr.param)
                 bind(expr.body)
                 pop()
             }

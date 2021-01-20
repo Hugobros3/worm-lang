@@ -1,23 +1,10 @@
 package boneless.classfile
 
-val moduleClassAccessFlags = ClassAccessFlags(
+val defaultClassAccessFlags = ClassAccessFlags(
     acc_public = true,
     acc_final = true,
     acc_super = true,
     acc_value_type = false,
-    acc_interface = false,
-    acc_abstract = false,
-    acc_synthetic = true,
-    acc_annotation = false,
-    acc_enum = false,
-    acc_module = false,
-)
-
-val valueTypeClassAccessFlags = ClassAccessFlags(
-    acc_public = true,
-    acc_final = true,
-    acc_super = true,
-    acc_value_type = true,
     acc_interface = false,
     acc_abstract = false,
     acc_synthetic = true,

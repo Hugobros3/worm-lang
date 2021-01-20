@@ -75,7 +75,7 @@ class Emitter(val modules: List<Module>, val outputDir: File) {
                     return
 
                 type_classes.getOrPut(type) {
-                    val builder = ClassFileBuilder(className = mangled_datatype_name(type), accessFlags = valueTypeClassAccessFlags)
+                    val builder = ClassFileBuilder(className = mangled_datatype_name(type), accessFlags = defaultClassAccessFlags.copy(acc_value_type = true))
                     for ((i, element) in type.elements.withIndex()) {
                         if (element == unit_type())
                             continue
@@ -119,7 +119,7 @@ class Emitter(val modules: List<Module>, val outputDir: File) {
     }
 
     fun emit(module: Module): ClassFile {
-        val builder = ClassFileBuilder(className = module.name, accessFlags = moduleClassAccessFlags)
+        val builder = ClassFileBuilder(className = module.name, accessFlags = defaultClassAccessFlags)
 
         for (def in module.defs) {
             when(def.body) {
@@ -154,7 +154,7 @@ class Emitter(val modules: List<Module>, val outputDir: File) {
                     builder.loadVariable(argument_local_var)
                 }
                 val m = mutableMapOf<Pattern, PutOnStack>()
-                registerPattern(m, fn.parameters, procedure)
+                registerPattern(m, fn.param, procedure)
                 patternsAccess += m
             }
             println(patternsAccess)
@@ -233,11 +233,7 @@ class Emitter(val modules: List<Module>, val outputDir: File) {
                 }
                 is Expression.RecordExpression -> TODO()
                 is Expression.Invocation -> {
-                    when {
-                        expr.args.isEmpty() -> {}
-                        expr.args.size == 1 -> emit(expr.args.first())
-                        else -> emit_tuple(expr.args)
-                    }
+                    emit(expr.arg)
                     TODO("perform actual call")
                 }
                 is Expression.Function -> TODO()

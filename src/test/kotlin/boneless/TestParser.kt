@@ -20,7 +20,9 @@ class TestParser {
             Tokenizer(printedProgram).tokenize()
         )
         val program2 = parser2.parseModule()
-        assertTrue(program == program2)
+        assert(program == program2) {
+            println(program2.prettyPrint())
+        }
     }
 
     private fun testParseSeq(str: String) {

@@ -401,9 +401,7 @@ class Parser(private val inputAsText: String, private val tokens: List<Tokenizer
                             prefix.rewrite
                         )
                     ),
-                    listOf(
-                        acceptPrefixedPrimaryExpr()!!
-                    )
+                    acceptPrefixedPrimaryExpr()!!
                 )
             }
         }
@@ -421,12 +419,22 @@ class Parser(private val inputAsText: String, private val tokens: List<Tokenizer
                 if ((infix.priority >= priority)) {
                     if (infix == InfixOperator.Application) {
                         val following = acceptPrimaryExpression() ?: continue
-                        accumulator = when (val oldfirst = accumulator) {
-                            is Expression.Invocation -> Expression.Invocation(
-                                oldfirst.callee,
-                                oldfirst.args + listOf(following)
-                            )
-                            else -> Expression.Invocation(accumulator, listOf(following))
+                        val acc = accumulator
+                        accumulator = when  {
+                            // Syntactic sugar to turn `f a b c d` into `f (a, b, c, d)`
+                            acc is Expression.Invocation && acc.arg is Expression.ListExpression && acc.arg.is_synthesized_invocation_argument_list -> {
+                                Expression.Invocation(
+                                    acc.callee,
+                                    Expression.ListExpression(acc.arg.elements + listOf(following))
+                                )
+                            }
+                            acc is Expression.Invocation -> {
+                                Expression.Invocation(
+                                    acc.callee,
+                                    Expression.ListExpression(listOf(acc.arg, following))
+                                )
+                            }
+                            else -> Expression.Invocation(accumulator, following)
                         }
                         continue@outerBinop
                     } else if (accept(infix.token.str)) {
@@ -447,10 +455,10 @@ class Parser(private val inputAsText: String, private val tokens: List<Tokenizer
                                             infix.rewrite!!
                                         )
                                     ),
-                                    listOf(
+                                    Expression.ListExpression(listOf(
                                         accumulator,
                                         rhs
-                                    )
+                                    ))
                                 )
                             }
                         }

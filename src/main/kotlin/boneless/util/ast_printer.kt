@@ -28,9 +28,9 @@ private class PrettyPrinter(val resugarizePrefixAndInfixSymbols: Boolean = true,
         is Def.DefBody.TypeAlias -> "type " + identifier + " = " + body.aliasedType.print()
         is Def.DefBody.FnBody -> "fn $identifier " + body.fn.run {
             if (returnTypeAnnotation == null)
-                parameters.print() + " => " + body.print()
+                param.print() + " => " + body.print()
             else
-                parameters.print() + " -> " + returnTypeAnnotation.print() + " = " + body.print()
+                param.print() + " -> " + returnTypeAnnotation.print() + " = " + body.print()
         }
     } + ";"
 
@@ -68,15 +68,16 @@ private class PrettyPrinter(val resugarizePrefixAndInfixSymbols: Boolean = true,
                 if (resugarizePrefixAndInfixSymbols && callee is Expression.IdentifierRef) {
                     val prefix = PrefixOperator.values().find { it.rewrite == callee.id.identifier }
                     val infix = InfixOperator.values().find { it.rewrite == callee.id.identifier }
-                    if (prefix != null && args.size == 1) {
-                        return prefix.token.str + args[0].print(9999)
-                    } else if (infix != null && args.size == 2) {
+                    if (prefix != null) {
+                        return prefix.token.str + arg.print(9999)
+                    } else if (infix != null) {
+                        val args = arg as Expression.ListExpression
                         p = infix.priority
-                        return open() + args[0].print(p) + " ${infix.token.str} " + args[1].print(p) + close()
+                        return open() + args.elements[0].print(p) + " ${infix.token.str} " + args.elements[1].print(p) + close()
                     }
                 }
                 p = InfixOperator.Application.priority
-                open() + this.callee.print() + " " + args.mapIndexed { i, it -> it.print(p, i == 0) }.joinToString(" ") + close()
+                open() + this.callee.print() + " " + arg.print(p) + close()
             }
             is Expression.ListExpression -> "(" + elements.joinToString(", ") { it.print() } + ")"
             is Expression.RecordExpression -> "(" + fields.map { (id, e) -> "$id = ${e.print()}" }.joinToString(", ") + ")"
@@ -85,9 +86,9 @@ private class PrettyPrinter(val resugarizePrefixAndInfixSymbols: Boolean = true,
             ) + "\n") else "" + "}"
             is Expression.Function -> {
                 if (returnTypeAnnotation == null)
-                    open() + "fn " + parameters.print() + " => " + body.print() + close()
+                    open() + "fn " + param.print() + " => " + body.print() + close()
                 else
-                    open() + "fn " + parameters.print() + " -> " + returnTypeAnnotation.print() + " = " + body.print() + close()
+                    open() + "fn " + param.print() + " -> " + returnTypeAnnotation.print() + " = " + body.print() + close()
             }
             is Expression.Conditional -> "if " + condition.print() + " then " + ifTrue.print() + " else " + ifFalse.print()
             is Expression.WhileLoop -> "while " + loopCondition.print(0) + " do " + body.print(0)

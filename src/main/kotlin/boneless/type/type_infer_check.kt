@@ -152,16 +152,12 @@ class TypeChecker(val module: Module) {
                 val targetType = infer(expr.callee)
                 if (targetType !is Type.FnType)
                     throw Exception("invocation callee is not a function $targetType")
-                val argsType: Type = when {
-                    expr.args.isEmpty() -> unit_type()
-                    expr.args.size == 1 -> infer(expr.args[0])
-                    else -> infer(Expression.ListExpression(expr.args))
-                }
+                val argsType = infer(expr.arg)
                 expect(argsType, targetType.dom)
                 targetType.codom
             }
             is Expression.Function -> {
-                val dom = infer(expr.parameters)
+                val dom = infer(expr.param)
                 val codom = if (expr.returnTypeAnnotation == null)
                     infer(expr.body)
                 else
@@ -222,12 +218,7 @@ class TypeChecker(val module: Module) {
                 val targetType = infer(expr.callee)
                 if (targetType !is Type.FnType)
                     type_error("invocation callee is not a function $targetType")
-                val argsType: Type = when {
-                    expr.args.isEmpty() -> unit_type()
-                    expr.args.size == 1 -> infer(expr.args[0])
-                    else -> infer(Expression.ListExpression(expr.args))
-                }
-                expect(argsType, targetType.dom)
+                check(expr.arg, targetType.dom)
                 expect(targetType.codom, expected_type)
                 targetType.codom
             }
