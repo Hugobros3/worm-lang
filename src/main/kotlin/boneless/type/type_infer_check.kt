@@ -83,7 +83,7 @@ class TypeChecker(val module: Module) {
     fun check(node: Typeable, expected_type: Type): Type {
         node.type?.let { throw Exception("The type already exists!") }
         val checked = when (node) {
-            is Def -> checkDef(node, expected_type)
+            is Def -> throw Exception("You may not check a def - this is local type inference only.")
             is Literal -> checkValue(node, expected_type)
             is Expression -> checkExpr(node, expected_type)
             is Pattern -> checkPattern(node, expected_type)
@@ -119,10 +119,6 @@ class TypeChecker(val module: Module) {
             is Def.DefBody.TypeAlias -> resolveType(body.aliasedType)
             is Def.DefBody.FnBody -> infer(body.fn)
         }
-    }
-
-    fun checkDef(def: Def, expected_type: Type): Type {
-        TODO()
     }
 
     fun inferExpr(expr: Expression): Type {
