@@ -15,7 +15,11 @@ sealed class TermLocation {
     data class DefRef(val def: Def) : TermLocation()
     data class BinderRef(val binder: Pattern.BinderPattern) : TermLocation()
     data class BuiltinRef(val fn: BuiltinFn) : TermLocation()
-    data class TypeParamRef(val def: Def, val index: Int) : TermLocation()
+    data class TypeParamRef(val def: Def, val index: Int) : TermLocation() {
+        override fun toString(): String {
+            return def.typeParams[index]
+        }
+    }
 }
 
 fun bind(module: Module) {

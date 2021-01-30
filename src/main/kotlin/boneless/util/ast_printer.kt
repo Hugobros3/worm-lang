@@ -61,7 +61,8 @@ private class PrettyPrinter(val resugarizePrefixAndInfixSymbols: Boolean = true,
 
     fun Expression.print(infixOpPriority: Int = -1, firstOperand: Boolean = true): String {
         return if (printInferredTypes) {
-            "(${this.print_(infixOpPriority, firstOperand)} /* ${this.type!!.print()} */)"
+            "(${this.print_(infixOpPriority, firstOperand)} /* ${this.type?.print() ?: 
+            throw Exception("")} */)"
         } else this.print_(infixOpPriority, firstOperand)
     }
 

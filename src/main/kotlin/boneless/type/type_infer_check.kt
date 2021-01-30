@@ -106,6 +106,7 @@ class TypeChecker(val module: Module) {
                     check(body.expr, resolveType(body.annotatedType))
             }
             is Def.DefBody.DataCtor -> {
+                // TODO return nominal type but allow it to subtype as that
                 body.nominalType =
                     Type.NominalType(def.identifier, resolveType(body.datatype))
                 Type.FnType(
@@ -127,12 +128,18 @@ class TypeChecker(val module: Module) {
                 when (val r = expr.id.resolved) {
                     is TermLocation.DefRef -> infer(r.def)
                     is TermLocation.BinderRef -> infer(r.binder)
-                    is TermLocation.BuiltinRef -> resolveType(r.fn.typeExpr)
+                    is TermLocation.BuiltinRef -> resolveType(r.fn.typeExpr) // TODO this is garbage
                     is TermLocation.TypeParamRef -> Type.TypeParam(r)
                 }
             }
             is Expression.ExprSpecialization -> {
-                TODO()
+                infer (expr.target)
+                val def = (expr.target.id.resolved as? TermLocation.DefRef)?.def ?: throw Exception("Can only specialize defs")
+                if (def.typeParams.size != expr.arguments.size)
+                    throw Exception("Given ${expr.arguments} arguments but ${def.identifier} only has ${def.typeParams.size} type arguments")
+                val genericType = infer(def)
+                val substitutions = def.typeParams.mapIndexed { i, p -> Pair(Type.TypeParam(TermLocation.TypeParamRef(def, i)) as Type, resolveType( expr.arguments[i]) ) }.toMap()
+                specializeType(genericType, substitutions)
             }
             is Expression.ListExpression -> {
                 val inferred = expr.elements.map { infer(it) }
@@ -194,7 +201,7 @@ class TypeChecker(val module: Module) {
             is Expression.IdentifierRef -> {
                 expect(
                     when (val r = expr.id.resolved) {
-                        is TermLocation.DefRef -> infer(r.def,)
+                        is TermLocation.DefRef -> infer(r.def)
                         is TermLocation.BinderRef -> infer(r.binder)
                         is TermLocation.BuiltinRef -> {
                             resolveType(r.fn.typeExpr)
@@ -205,7 +212,9 @@ class TypeChecker(val module: Module) {
                 expected_type
             }
             is Expression.ExprSpecialization -> {
-                TODO()
+                val t = inferExpr(expr)
+                expect(t, expected_type)
+                t
             }
             is Expression.ListExpression -> {
                 if (expected_type !is Type.TupleType)
@@ -436,13 +445,17 @@ class TypeChecker(val module: Module) {
                         is Def.DefBody.FnBody -> infer(resolved.def) as Type.FnType
                     }
                 }
+                is TermLocation.TypeParamRef -> Type.TypeParam(resolved)
                 else -> error("let & pattern binders are not supported in typing ... for now anyways")
             }
         }
         is TypeExpr.TypeSpecialization -> {
-            val polymorphic = resolveType(type.target)
-
-            TODO()
+            val def = (type.target.callee.resolved as? TermLocation.DefRef)?.def ?: throw Exception("Can only specialize defs")
+            if (def.typeParams.size != type.arguments.size)
+                throw Exception("Given ${type.arguments} arguments but ${def.identifier} only has ${def.typeParams.size} type arguments")
+            val genericType = resolveType(type.target)
+            val substitutions = def.typeParams.mapIndexed { i, p -> Pair(Type.TypeParam(TermLocation.TypeParamRef(def, i)) as Type, resolveType( type.arguments[i]) ) }.toMap()
+            specializeType(genericType, substitutions)
         }
         is TypeExpr.PrimitiveType -> Type.PrimitiveType(type.primitiveType)
         is TypeExpr.RecordType -> Type.RecordType(elements = type.elements.map { (i, t) -> Pair(i, resolveType(t)) })

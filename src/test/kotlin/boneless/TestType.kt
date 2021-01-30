@@ -120,4 +120,30 @@ class TestType {
             };
         """.trimIndent())
     }
+
+    @Test
+    fun testTypeParams() {
+        testType("""
+            forall T
+            fn mk_pair (a: T) => (a, a);
+            
+            fn f() => {
+                mk_pair::I32 (2);
+            };
+            
+            fn g() => {
+                let f1 = mk_pair::I32;
+                let f2 : fn I32 -> [I32, I32] = f1;
+                let f3 : fn I32 -> [I32, I32] = mk_pair::I32;
+            };
+        """.trimIndent())
+
+        testType("""
+            forall T
+            data Option = [some = T | none = []];
+            
+            fn f(o: Option::I32) => {
+            };
+        """.trimIndent())
+    }
 }
