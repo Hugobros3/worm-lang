@@ -130,6 +130,9 @@ class TypeChecker(val module: Module) {
                     is BoundIdentifier.ToBuiltinFn -> resolveType(r.fn.typeExpr)
                 }
             }
+            is Expression.ExprSpecialization -> {
+                TODO()
+            }
             is Expression.ListExpression -> {
                 val inferred = expr.elements.map { infer(it) }
                 assert(inferred.size > 1)
@@ -198,6 +201,9 @@ class TypeChecker(val module: Module) {
                     }, expected_type
                 )
                 expected_type
+            }
+            is Expression.ExprSpecialization -> {
+                TODO()
             }
             is Expression.ListExpression -> {
                 if (expected_type !is Type.TupleType)
@@ -429,6 +435,11 @@ class TypeChecker(val module: Module) {
                 }
                 else -> error("let & pattern binders are not supported in typing ... for now anyways")
             }
+        }
+        is TypeExpr.TypeSpecialization -> {
+            val polymorphic = resolveType(type.target)
+
+            TODO()
         }
         is TypeExpr.PrimitiveType -> Type.PrimitiveType(type.primitiveType)
         is TypeExpr.RecordType -> Type.RecordType(elements = type.elements.map { (i, t) -> Pair(i, resolveType(t)) })

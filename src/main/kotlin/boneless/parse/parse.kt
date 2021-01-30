@@ -124,8 +124,15 @@ class Parser(private val inputAsText: String, private val tokens: List<Tokenizer
 
     private fun expectModule(moduleName: String): Module {
         val defs = mutableListOf<Def>()
-        val typeParams = mutableListOf<Def.TypeParam>()
         while (true) {
+            val typeParams = mutableListOf<Identifier>()
+            if (accept("forall")) {
+                typeParams.add(expectIdentifier())
+                while (accept(",")) {
+                    typeParams.add(expectIdentifier())
+                }
+            }
+
             if (accept("data")) {
                 val identifier = expectIdentifier()
                 expect("=")
@@ -196,16 +203,23 @@ class Parser(private val inputAsText: String, private val tokens: List<Tokenizer
         if (prim_type != null)
             return TypeExpr.PrimitiveType(prim_type)
 
-        /*val ops = mutableListOf<Expression>()
-        while (true) {
-            ops += acceptExpression(0) ?: break
-        }*/
+        val ref = TypeExpr.TypeNameRef(BindPoint.new(calleeId))
 
-        return TypeExpr.TypeNameRef(
-            BindPoint.new(
-                calleeId
-            )//, ops
-        )
+        if (accept("::")) {
+            val types = mutableListOf<TypeExpr>()
+            if (accept("(")) {
+                types.add(expectType())
+                while(accept(",")) {
+                    types.add(expectType())
+                }
+                expect(")")
+            } else {
+                types.add(expectType())
+            }
+            return TypeExpr.TypeSpecialization(ref, types)
+        }
+
+        return ref
     }
 
     fun unit_type_expr() = TypeExpr.TupleType(emptyList())
@@ -329,18 +343,27 @@ class Parser(private val inputAsText: String, private val tokens: List<Tokenizer
                 ); }
             front.tokenName == "Identifier" -> {
                 val id = eatIdentifier()
-                val prim_type = PrimitiveTypeEnum.values().find { it.name == id }
-                if (prim_type != null)
-                    return Expression.QuoteType(
-                        TypeExpr.PrimitiveType(
-                            prim_type
-                        )
-                    )
-                return Expression.IdentifierRef(
+                val ref =  Expression.IdentifierRef(
                     BindPoint.new(
                         id
                     )
                 )
+
+                if (accept("::")) {
+                    val types = mutableListOf<TypeExpr>()
+                    if (accept("(")) {
+                        types.add(expectType())
+                        while(accept(",")) {
+                            types.add(expectType())
+                        }
+                        expect(")")
+                    } else {
+                        types.add(expectType())
+                    }
+                    return Expression.ExprSpecialization(ref, types)
+                }
+
+                return ref
             }
             accept("if") -> {
                 val condition = acceptExpression(0)!!

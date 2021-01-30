@@ -29,6 +29,7 @@ class Emitter(val modules: List<Module>, val outputDir: File) {
 
     fun getFieldDescriptor(type: Type): FieldDescriptor? {
         return when(type) {
+            is Type.TypeParam -> throw Exception("Type params should be monomorphized !")
             is Type.PrimitiveType -> when(type.primitiveType) {
                 PrimitiveTypeEnum.Bool -> TODO()
                 PrimitiveTypeEnum.I32 -> FieldDescriptor.BaseType.I
@@ -51,6 +52,7 @@ class Emitter(val modules: List<Module>, val outputDir: File) {
     }
 
     fun mangled_datatype_name(type: Type): String = when(type) {
+        is Type.TypeParam -> throw Exception("Type params should be monomorphized !")
         is Type.PrimitiveType -> "Primitive${type.primitiveType.name}"
         is Type.RecordType -> "RecordType__" + type.elements.joinToString("") { (f, t) -> "${f}_${mangled_datatype_name(t)}__" }
         is Type.TupleType -> "TupleType__" + type.elements.joinToString("") { t -> "${mangled_datatype_name(t)}__" }

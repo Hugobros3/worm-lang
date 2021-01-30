@@ -27,17 +27,23 @@ fun TypeExpr.prettyPrint(): String {
 
 private class PrettyPrinter(val resugarizePrefixAndInfixSymbols: Boolean = true, val printInferredTypes: Boolean = false) {
     fun Module.print() = defs.joinToString("\n") { it.print() }
-    fun Def.print() = when(body) {
-        is Def.DefBody.ExprBody -> "def $identifier" + body.annotatedType.printTypeAnnotation() + " = " + body.expr.print(0)
-        is Def.DefBody.DataCtor -> "data " + identifier + " = " + body.datatype.print()
-        is Def.DefBody.TypeAlias -> "type " + identifier + " = " + body.aliasedType.print()
-        is Def.DefBody.FnBody -> "fn $identifier " + body.fn.run {
-            if (returnTypeAnnotation == null)
-                param.print() + " => " + body.print()
-            else
-                param.print() + " -> " + returnTypeAnnotation.print() + " = " + body.print()
+    fun Def.print(): String {
+        var poly = ""
+        if (typeParams.isNotEmpty()) {
+            poly = "forall " + typeParams.joinToString(", ") { it } + "\n"
         }
-    } + ";"
+        return poly + when(body) {
+            is Def.DefBody.ExprBody -> "def $identifier" + body.annotatedType.printTypeAnnotation() + " = " + body.expr.print(0)
+            is Def.DefBody.DataCtor -> "data " + identifier + " = " + body.datatype.print()
+            is Def.DefBody.TypeAlias -> "type " + identifier + " = " + body.aliasedType.print()
+            is Def.DefBody.FnBody -> "fn $identifier " + body.fn.run {
+                if (returnTypeAnnotation == null)
+                    param.print() + " => " + body.print()
+                else
+                    param.print() + " -> " + returnTypeAnnotation.print() + " = " + body.print()
+            }
+        } + ";"
+    }
 
     private fun Instruction.print() = when (this) {
         is Instruction.Let -> "let ${pattern.print()}" + " = " + body.print() + ";"
@@ -68,6 +74,7 @@ private class PrettyPrinter(val resugarizePrefixAndInfixSymbols: Boolean = true,
             is Expression.QuoteLiteral -> literal.print(firstOperand)
             is Expression.QuoteType -> "[" + quotedType.print() + "]"
             is Expression.IdentifierRef -> id.identifier
+            is Expression.ExprSpecialization -> target.print() + "::" + if (arguments.size == 1) arguments[0].print() else ( "(" + arguments.joinToString(", ") { it.prettyPrint() } + ")" )
             is Expression.Invocation -> {
                 val callee = callee
                 if (resugarizePrefixAndInfixSymbols && callee is Expression.IdentifierRef) {
@@ -111,6 +118,7 @@ private class PrettyPrinter(val resugarizePrefixAndInfixSymbols: Boolean = true,
     fun TypeExpr.print(): String = when {
         this is TypeExpr.PrimitiveType -> primitiveType.name
         this is TypeExpr.TypeNameRef -> callee.identifier
+        this is TypeExpr.TypeSpecialization -> target.print() + "::" + if (arguments.size == 1) arguments[0].print() else ( "(" + arguments.joinToString(", ") { it.prettyPrint() } + ")" )
 
         this is TypeExpr.TupleType && elements.isEmpty() -> "[]"
         this is TypeExpr.TupleType && elements.isNotEmpty() -> "[" + elements.joinToString(", ") { e -> e.print() } + "]"
@@ -136,6 +144,7 @@ private class PrettyPrinter(val resugarizePrefixAndInfixSymbols: Boolean = true,
         this is Type.EnumType -> "[" + elements.joinToString(" | ") { (name, type) -> name + "=" + type.print() } + "]"
         this is Type.FnType -> dom.print() + " -> " + codom.print()
         this is Type.NominalType -> name
+        this is Type.TypeParam -> identifier
         else -> throw Exception("Unprintable type")
     }
 

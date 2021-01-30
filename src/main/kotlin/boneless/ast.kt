@@ -10,7 +10,7 @@ import boneless.type.typeable
 typealias Identifier = String
 
 data class Module(val name: Identifier, val defs: Set<Def>)
-data class Def(val identifier: Identifier, val body: DefBody, val typeParams: List<TypeParam>) : Typeable by typeable() {
+data class Def(val identifier: Identifier, val body: DefBody, val typeParams: List<Identifier>) : Typeable by typeable() {
     sealed class DefBody {
         data class ExprBody(val expr: Expression, val annotatedType: TypeExpr?): DefBody()
         data class DataCtor(val datatype: TypeExpr): DefBody() {
@@ -20,8 +20,6 @@ data class Def(val identifier: Identifier, val body: DefBody, val typeParams: Li
         data class FnBody(val fn: Expression.Function): DefBody()
         data class TypeAlias(val aliasedType: TypeExpr): DefBody()
     }
-
-    class TypeParam(val identifier: Identifier)
 
     val is_type: Boolean = body is DefBody.TypeAlias
 }
@@ -57,6 +55,7 @@ sealed class Expression : Typeable by typeable() {
     data class QuoteType(val quotedType: TypeExpr) : Expression()
 
     data class IdentifierRef(val id: BindPoint) : Expression()
+    data class ExprSpecialization(val target: IdentifierRef, val arguments: List<TypeExpr>) : Expression()
 
     data class ListExpression(val elements: List<Expression>, val is_synthesized_invocation_argument_list: Boolean = false) : Expression()
     data class RecordExpression(val fields: List<Pair<Identifier, Expression>>) : Expression()
@@ -75,6 +74,7 @@ sealed class Expression : Typeable by typeable() {
 sealed class TypeExpr {
     data class PrimitiveType(val primitiveType: PrimitiveTypeEnum) : TypeExpr()
     data class TypeNameRef(val callee: BindPoint) : TypeExpr()
+    data class TypeSpecialization(val target: TypeNameRef, val arguments: List<TypeExpr>) : TypeExpr()
     data class RecordType(val elements: List<Pair<Identifier, TypeExpr>>) : TypeExpr()
     data class TupleType(val elements: List<TypeExpr>) : TypeExpr() {
         val isUnit: Boolean get() = elements.isEmpty()

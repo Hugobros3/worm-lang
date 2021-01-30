@@ -189,14 +189,15 @@ class TestParser {
         }
     }
 
-    /*@Test
+    @Test
     fun testTypeParams() {
         testModule("""
-
+            forall T
+            fn mk_pair (a: T, b: T) => (a, b);
         """.trimIndent())
 
         testModule("""
-                fn deref_s_ptr s: ref :: [I32, I32] => @s;
-            """.trimIndent())
-    }*/
+            fn deref_s_ptr s: ref :: [I32, I32] => @s;
+        """.trimIndent())
+    }
 }

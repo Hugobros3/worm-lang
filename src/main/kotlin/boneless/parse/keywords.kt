@@ -11,6 +11,9 @@ enum class Keyword(val str: String) {
     LSquareBrace("["),
     RSquareBrace("]"),
 
+    Forall("forall"),
+    Specialization("::"),
+
     Def("def"),
     Let("let"),
     Var("var"),
@@ -25,7 +28,6 @@ enum class Keyword(val str: String) {
     Do("do"),
     For("for"),
 
-    // DefinitionSeparator("::"),
     Range(".."),
     Map("=>"),
     Arrow("->"),
