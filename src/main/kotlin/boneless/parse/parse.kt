@@ -3,8 +3,6 @@ package boneless.parse
 import boneless.*
 import boneless.bind.BindPoint
 import boneless.type.PrimitiveTypeEnum
-import boneless.type.Type
-import boneless.type.unit_type
 
 class Parser(private val inputAsText: String, private val tokens: List<Tokenizer.Token>) {
     private var i = 0
@@ -177,6 +175,21 @@ class Parser(private val inputAsText: String, private val tokens: List<Tokenizer
                 val body = Def.DefBody.FnBody(fn)
                 defs += Def(identifier, body, typeParams)
                 expect(";")
+            } else if (accept("contract")) {
+                val identifier = expectIdentifier()
+                expect("=")
+                val body = Def.DefBody.Contract(expectType())
+                defs += Def(identifier, body, typeParams)
+                expect(";")
+            } else if (accept("instance")) {
+                val ctIdentifier = expectIdentifier()
+                expect("::")
+                val args = expectSpecializationArgs()
+                expect("=")
+                val body = Def.DefBody.Instance(ctIdentifier, args, expectExpression(0))
+                // instances don't get referred to by name
+                defs += Def("__impl_${ctIdentifier}_$args", body, typeParams)
+                expect(";")
             } else break
         }
         return Module(moduleName, defs.toSet())
@@ -206,17 +219,7 @@ class Parser(private val inputAsText: String, private val tokens: List<Tokenizer
         val ref = TypeExpr.TypeNameRef(BindPoint.new(calleeId))
 
         if (accept("::")) {
-            val types = mutableListOf<TypeExpr>()
-            if (accept("(")) {
-                types.add(expectType())
-                while(accept(",")) {
-                    types.add(expectType())
-                }
-                expect(")")
-            } else {
-                types.add(expectType())
-            }
-            return TypeExpr.TypeSpecialization(ref, types)
+            return TypeExpr.TypeSpecialization(ref, expectSpecializationArgs())
         }
 
         return ref
@@ -235,7 +238,7 @@ class Parser(private val inputAsText: String, private val tokens: List<Tokenizer
                 base is TypeExpr.TypeNameRef && accept("=") -> {
                     val elems = mutableListOf(Pair(base.callee.identifier, expectType()))
                     when (front.tokenName) {
-                        "," -> {
+                        ",", "]" -> {
                             while (accept(",")) {
                                 val id = expectIdentifier()
                                 expect("=")
@@ -350,17 +353,7 @@ class Parser(private val inputAsText: String, private val tokens: List<Tokenizer
                 )
 
                 if (accept("::")) {
-                    val types = mutableListOf<TypeExpr>()
-                    if (accept("(")) {
-                        types.add(expectType())
-                        while(accept(",")) {
-                            types.add(expectType())
-                        }
-                        expect(")")
-                    } else {
-                        types.add(expectType())
-                    }
-                    return Expression.ExprSpecialization(ref, types)
+                    return Expression.ExprSpecialization(ref, expectSpecializationArgs())
                 }
 
                 return ref
@@ -584,6 +577,19 @@ class Parser(private val inputAsText: String, private val tokens: List<Tokenizer
             return Pattern.TypeAnnotatedPattern(pattern, typeAnnotation)
         }
         return pattern
+    }
+    private fun expectSpecializationArgs(): List<TypeExpr> {
+        val types = mutableListOf<TypeExpr>()
+        if (accept("(")) {
+            types.add(expectType())
+            while(accept(",")) {
+                types.add(expectType())
+            }
+            expect(")")
+        } else {
+            types.add(expectType())
+        }
+        return types
     }
 
     fun parseModule(moduleName: String = "DefaultModule"): Module {

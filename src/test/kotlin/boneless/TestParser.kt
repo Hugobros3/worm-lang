@@ -200,4 +200,18 @@ class TestParser {
             fn deref_s_ptr s: ref :: [I32, I32] => @s;
         """.trimIndent())
     }
+
+    @Test
+    fun testContracts() {
+        testModule("""
+            forall T
+            contract Foo = [
+                fooerize = fn T -> I32
+            ];
+            
+            instance Foo::I32 = (
+                fooerize = fn t => t
+            );
+        """.trimIndent())
+    }
 }

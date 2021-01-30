@@ -42,6 +42,8 @@ private class PrettyPrinter(val resugarizePrefixAndInfixSymbols: Boolean = true,
                 else
                     param.print() + " -> " + returnTypeAnnotation.print() + " = " + body.print()
             }
+            is Def.DefBody.Contract -> "contract $identifier = ${body.payload.print()}"
+            is Def.DefBody.Instance -> "instance ${body.contractId}::" + (if (body.typeArgs.size == 1) body.typeArgs[0].print() else ( "(" + body.typeArgs.joinToString(", ") { it.print() } + ")" )) + " = " + body.body.print(0)
         } + ";"
     }
 
@@ -129,7 +131,7 @@ private class PrettyPrinter(val resugarizePrefixAndInfixSymbols: Boolean = true,
         this is TypeExpr.ArrayType -> "[" + elementType.print() + (if (size == -1) ".." else "..$size") + "]"
 
         this is TypeExpr.EnumType -> "[" + elements.joinToString(" | ") { (name, type) -> name + "=" + type.print() } + "]"
-        this is TypeExpr.FnType -> dom.print() + " -> " + codom.print()
+        this is TypeExpr.FnType -> "fn " + dom.print() + " -> " + codom.print()
         else -> throw Exception("Unprintable type")
     }
 
@@ -143,7 +145,7 @@ private class PrettyPrinter(val resugarizePrefixAndInfixSymbols: Boolean = true,
         this is Type.ArrayType -> "[" + elementType.print() + (if (size == -1) ".." else "..$size") + "]"
 
         this is Type.EnumType -> "[" + elements.joinToString(" | ") { (name, type) -> name + "=" + type.print() } + "]"
-        this is Type.FnType -> dom.print() + " -> " + codom.print()
+        this is Type.FnType -> "fn " + dom.print() + " -> " + codom.print()
         this is Type.NominalType -> name
         this is Type.TypeParam -> bound.def.typeParams[bound.index]
         else -> throw Exception("Unprintable type")

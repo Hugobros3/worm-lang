@@ -117,6 +117,8 @@ class TypeChecker(val module: Module) {
             }
             is Def.DefBody.TypeAlias -> resolveType(body.aliasedType)
             is Def.DefBody.FnBody -> infer(body.fn)
+            is Def.DefBody.Contract -> TODO()
+            is Def.DefBody.Instance -> TODO()
         }
     }
 
@@ -443,6 +445,8 @@ class TypeChecker(val module: Module) {
                             infer(resolved.def)
                         }
                         is Def.DefBody.FnBody -> infer(resolved.def) as Type.FnType
+                        is Def.DefBody.Contract,
+                        is Def.DefBody.Instance -> throw Exception("Contracts & instances are not types")
                     }
                 }
                 is TermLocation.TypeParamRef -> Type.TypeParam(resolved)

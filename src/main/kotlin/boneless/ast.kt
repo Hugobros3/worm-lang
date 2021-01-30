@@ -19,6 +19,9 @@ data class Def(val identifier: Identifier, val body: DefBody, val typeParams: Li
         }
         data class FnBody(val fn: Expression.Function): DefBody()
         data class TypeAlias(val aliasedType: TypeExpr): DefBody()
+
+        data class Contract(val payload: TypeExpr) : DefBody()
+        data class Instance(val contractId: Identifier, val typeArgs: List<TypeExpr>, val body: Expression) : DefBody()
     }
 
     val is_type: Boolean = body is DefBody.TypeAlias
