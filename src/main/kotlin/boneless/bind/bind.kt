@@ -17,7 +17,7 @@ sealed class TermLocation {
     data class BuiltinRef(val fn: BuiltinFn) : TermLocation()
     data class TypeParamRef(val def: Def, val index: Int) : TermLocation() {
         override fun toString(): String {
-            return def.typeParams[index]
+            return def.typeParamsNames[index]
         }
 
         override fun hashCode(): Int {
@@ -74,7 +74,7 @@ class BindHelper(private val module: Module) {
 
     internal fun bind(def: Def) {
         push()
-        for ((i, typeParam) in def.typeParams.withIndex()) {
+        for ((i, typeParam) in def.typeParamsNames.withIndex()) {
             this[typeParam] = TermLocation.TypeParamRef(def, i)
         }
 

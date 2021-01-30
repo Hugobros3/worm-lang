@@ -37,10 +37,9 @@ fun typeable() = object : Typeable {
 }
 
 class TypeChecker(val module: Module) {
-    //val map = mutableMapOf<Any, Type>()
     val stack = mutableListOf<Frame>()
 
-    class Frame(val typingWhat: Typeable)
+    class Frame(val def: Def)
 
     private fun cannot_infer(node: Typeable): Nothing {
         throw Exception("Cannot infer $node")
@@ -50,9 +49,9 @@ class TypeChecker(val module: Module) {
         throw Exception("Error while typing: $error")
     }
 
-    fun enter(what: Typeable): Frame {
-        if (stack.any { it.typingWhat == what }) {
-            //error("The type checker has run into recursive problems typing $what")
+    fun enter(what: Def): Frame {
+        if (stack.any { it.def == what }) {
+            error("The type checker has run into recursive problems typing $what")
         }
         val frame = Frame(what)
         stack.add(0, frame)
@@ -60,9 +59,19 @@ class TypeChecker(val module: Module) {
     }
 
     fun leave() = stack.removeAt(0)
+    fun current_frame() = stack[0]
 
     fun expect(type: Type, expected_type: Type) {
         if (type != expected_type)
+            throw Exception("Expected $expected_type but got $type")
+    }
+
+    fun coerce(expr: Expression, type: Type, expected_type: Type) {
+        if (type == expected_type)
+            return Unit
+        if (isSubtype(type, expected_type)) {
+            expr.deducedImplicitCast = expected_type
+        } else
             throw Exception("Expected $expected_type but got $type")
     }
 
@@ -99,39 +108,53 @@ class TypeChecker(val module: Module) {
     }
 
     fun inferDef(def: Def): Type {
-        return when (val body = def.body) {
+        enter(def)
+        def.typeParams = def.typeParamsNames.mapIndexed { i, n -> Type.TypeParam(TermLocation.TypeParamRef(def, i)) }
+        val t = when (val body = def.body) {
             is Def.DefBody.ExprBody -> {
                 if (body.annotatedType == null)
                     infer(body.expr)
                 else
-                    check(body.expr, resolveType(body.annotatedType))
+                    check(body.expr, resolveTypeExpression(body.annotatedType))
             }
             is Def.DefBody.DataCtor -> {
                 // TODO return nominal type but allow it to subtype as that
                 body.nominalType =
-                    Type.NominalType(def.identifier, resolveType(body.datatype))
+                    Type.NominalType(def.identifier, resolveTypeExpression(body.datatype))
                 Type.FnType(
-                    resolveType(body.datatype),
+                    resolveTypeExpression(body.datatype),
                     body.nominalType,
                     constructorFor = body.nominalType
                 )
             }
-            is Def.DefBody.TypeAlias -> resolveType(body.aliasedType)
+            is Def.DefBody.TypeAlias -> resolveTypeExpression(body.aliasedType)
             is Def.DefBody.FnBody -> infer(body.fn)
-            is Def.DefBody.Contract -> resolveType(body.payload)
+            is Def.DefBody.Contract -> resolveTypeExpression(body.payload)
             is Def.DefBody.Instance -> {
                 val contract_def = get_def(body.contractId.resolved)
-                contract_def?.body as? Def.DefBody.Contract ?: throw Exception("Instances must reference contract definitions")
+                contract_def?.body as? Def.DefBody.Contract
+                    ?: throw Exception("Instances must reference contract definitions")
                 val contract_type = infer(contract_def)
 
-                body.arguments = body.argumentsExpr.map { resolveType( it) }
+                body.arguments = body.argumentsExpr.map { resolveTypeExpression(it) }
 
-                val substitutions = contract_def.typeParams.mapIndexed { i, _ -> Pair(Type.TypeParam(TermLocation.TypeParamRef(contract_def, i)) as Type, body.arguments[i] ) }.toMap()
+                val substitutions = contract_def.typeParamsNames.mapIndexed { i, _ ->
+                    Pair(
+                        Type.TypeParam(
+                            TermLocation.TypeParamRef(
+                                contract_def,
+                                i
+                            )
+                        ) as Type, body.arguments[i]
+                    )
+                }.toMap()
 
                 val specializedType = specializeType(contract_type, substitutions)
                 check(body.body, specializedType)
             }
         }
+        leave()
+        return t
     }
 
     fun inferExpr(expr: Expression): Type {
@@ -142,7 +165,7 @@ class TypeChecker(val module: Module) {
                 when (val r = expr.id.resolved) {
                     is TermLocation.DefRef -> infer(r.def)
                     is TermLocation.BinderRef -> infer(r.binder)
-                    is TermLocation.BuiltinRef -> resolveType(r.fn.typeExpr) // TODO this is garbage
+                    is TermLocation.BuiltinRef -> resolveTypeExpression(r.fn.typeExpr) // TODO this is garbage
                     is TermLocation.TypeParamRef -> Type.TypeParam(r)
                 }
             }
@@ -151,18 +174,29 @@ class TypeChecker(val module: Module) {
                 inferProjection(inside, expr.id)
             }
             is Expression.ExprSpecialization -> {
-                infer (expr.target)
-                val def = (expr.target.id.resolved as? TermLocation.DefRef)?.def ?: throw Exception("Can only specialize defs")
-                if (def.typeParams.size != expr.arguments.size)
-                    throw Exception("Given ${expr.arguments} arguments but ${def.identifier} only has ${def.typeParams.size} type arguments")
+                infer(expr.target)
+                val def = (expr.target.id.resolved as? TermLocation.DefRef)?.def
+                    ?: throw Exception("Can only specialize defs")
+                if (def.typeParamsNames.size != expr.arguments.size)
+                    throw Exception("Given ${expr.arguments} arguments but ${def.identifier} only has ${def.typeParamsNames.size} type arguments")
 
-                val typeArguments = expr.arguments.map { resolveType( it) }
+                val typeArguments = expr.arguments.map { resolveTypeExpression(it) }
 
                 if (def.body is Def.DefBody.Contract)
-                    findInstance(module, def, typeArguments) ?: throw Exception("No instance for contract ${def.identifier} with type arguments ${typeArguments.map { it.prettyPrint() }}")
+                    findInstance(module, def, typeArguments)
+                        ?: throw Exception("No instance for contract ${def.identifier} with type arguments ${typeArguments.map { it.prettyPrint() }}")
 
                 val genericType = infer(def)
-                val substitutions = def.typeParams.mapIndexed { i, _ -> Pair(Type.TypeParam(TermLocation.TypeParamRef(def, i)) as Type, typeArguments[i] ) }.toMap()
+                val substitutions = def.typeParamsNames.mapIndexed { i, _ ->
+                    Pair(
+                        Type.TypeParam(
+                            TermLocation.TypeParamRef(
+                                def,
+                                i
+                            )
+                        ) as Type, typeArguments[i]
+                    )
+                }.toMap()
                 specializeType(genericType, substitutions)
             }
             is Expression.ListExpression -> {
@@ -178,19 +212,32 @@ class TypeChecker(val module: Module) {
                 Type.RecordType(inferred)
             }
             is Expression.Invocation -> {
-                val targetType = infer(expr.callee)
-                if (targetType !is Type.FnType)
-                    throw Exception("invocation callee is not a function $targetType")
-                val argsType = infer(expr.arg)
-                expect(argsType, targetType.dom)
-                targetType.codom
+                if (needTypeParamInference(expr.callee)) {
+                    val argsType = infer(expr.arg)
+                    val targetType = check(expr.callee, Type.FnType(argsType, Type.Top))
+                    if (targetType !is Type.FnType)
+                        throw Exception("invocation callee is not a function $targetType")
+                    targetType.codom
+                } else {
+                    val targetType = infer(expr.callee)
+                    if (targetType !is Type.FnType)
+                        throw Exception("invocation callee is not a function $targetType")
+
+                    if (targetType.containsUnboundTypeParams()) {
+                        assert(false)
+                    }
+
+                    val argsType = infer(expr.arg)
+                    expect(argsType, targetType.dom)
+                    targetType.codom
+                }
             }
             is Expression.Function -> {
                 val dom = infer(expr.param)
                 val codom = if (expr.returnTypeAnnotation == null)
                     infer(expr.body)
                 else
-                    check(expr.body, resolveType(expr.returnTypeAnnotation))
+                    check(expr.body, resolveTypeExpression(expr.returnTypeAnnotation))
                 Type.FnType(dom, codom)
             }
             is Expression.Ascription -> TODO()
@@ -225,17 +272,45 @@ class TypeChecker(val module: Module) {
             is Expression.IdentifierRef -> {
                 expect(
                     when (val r = expr.id.resolved) {
-                        is TermLocation.DefRef -> infer(r.def)
+                        is TermLocation.DefRef -> {
+                            val t = infer(r.def)
+                            val def = r.def
+                            if (def.typeParamsNames.isNotEmpty()) {
+                                val substitutions = unify(t, expected_type)
+                                val st = specializeType(t, substitutions)
+                                expr.deducedImplicitSpecializationArguments = def.typeParams.map { substitutions[it]!! }
+                                coerce(expr, st, expected_type)
+                                return st
+                            }
+                            t
+                        }
                         is TermLocation.BinderRef -> infer(r.binder)
                         is TermLocation.BuiltinRef -> {
-                            resolveType(r.fn.typeExpr)
+                            resolveTypeExpression(r.fn.typeExpr)
                         }
                         is TermLocation.TypeParamRef -> Type.TypeParam(r)
                     }, expected_type
                 )
                 expected_type
             }
-            is Expression.Projection -> TODO()
+            is Expression.Projection -> {
+                val t = inferExpr(expr)
+
+                if (expr.expression is Expression.IdentifierRef) {
+                    val def = get_def(expr.expression.id.resolved)
+                    if (def != null && def.typeParamsNames.isNotEmpty()) {
+                        val substitutions = unify(t, expected_type)
+                        val st = specializeType(t, substitutions)
+                        expr.expression.deducedImplicitSpecializationArguments =
+                            def.typeParams.map { substitutions[it]!! }
+                        coerce(expr.expression, st, expected_type)
+                        return st
+                    }
+                }
+
+                expect(t, expected_type)
+                t
+            }
             is Expression.ExprSpecialization -> {
                 val t = inferExpr(expr)
                 expect(t, expected_type)
@@ -361,7 +436,7 @@ class TypeChecker(val module: Module) {
                 nominalTypeCtor.codom as Type.NominalType
             }
             is Pattern.TypeAnnotatedPattern -> {
-                check(pattern.pattern, resolveType(pattern.annotatedType))
+                check(pattern.pattern, resolveTypeExpression(pattern.annotatedType))
             }
         }
     }
@@ -408,7 +483,7 @@ class TypeChecker(val module: Module) {
             }
             is Pattern.TypeAnnotatedPattern -> {
                 // test me
-                expect(resolveType(pattern.annotatedType), expected_type);
+                expect(resolveTypeExpression(pattern.annotatedType), expected_type);
                 check(pattern.pattern, expected_type)
             }
         }
@@ -465,13 +540,13 @@ class TypeChecker(val module: Module) {
         return when (boundIdentifier) {
             is TermLocation.DefRef -> if (boundIdentifier.def.is_type) null else infer(boundIdentifier.def)
             is TermLocation.BinderRef -> infer(boundIdentifier.binder)
-            is TermLocation.BuiltinRef -> resolveType(boundIdentifier.fn.typeExpr)
+            is TermLocation.BuiltinRef -> resolveTypeExpression(boundIdentifier.fn.typeExpr)
             is TermLocation.TypeParamRef -> Type.TypeParam(boundIdentifier)
         }
     }
 
     /** Resolves TypeExprs */
-    fun resolveType(type: TypeExpr): Type = when (type) {
+    fun resolveTypeExpression(type: TypeExpr): Type = when (type) {
         is TypeExpr.TypeNameRef -> {
             when (val resolved = type.callee.resolved) {
                 is TermLocation.DefRef -> {
@@ -494,24 +569,44 @@ class TypeChecker(val module: Module) {
             }
         }
         is TypeExpr.TypeSpecialization -> {
-            val def = (type.target.callee.resolved as? TermLocation.DefRef)?.def ?: throw Exception("Can only specialize defs")
-            if (def.typeParams.size != type.arguments.size)
-                throw Exception("Given ${type.arguments} arguments but ${def.identifier} only has ${def.typeParams.size} type arguments")
-            val typeArguments = type.arguments.map { resolveType( it) }
+            val def = (type.target.callee.resolved as? TermLocation.DefRef)?.def
+                ?: throw Exception("Can only specialize defs")
+            if (def.typeParamsNames.size != type.arguments.size)
+                throw Exception("Given ${type.arguments} arguments but ${def.identifier} only has ${def.typeParamsNames.size} type arguments")
+            val typeArguments = type.arguments.map { resolveTypeExpression(it) }
 
             if (def.body is Def.DefBody.Contract)
-                findInstance(module, def, typeArguments) ?: throw Exception("No instance for contract ${def.identifier} with type arguments ${typeArguments.map { it.prettyPrint() }}")
+                findInstance(module, def, typeArguments)
+                    ?: throw Exception("No instance for contract ${def.identifier} with type arguments ${typeArguments.map { it.prettyPrint() }}")
 
-            val genericType = resolveType(type.target)
-            val substitutions = def.typeParams.mapIndexed { i, _ -> Pair(Type.TypeParam(TermLocation.TypeParamRef(def, i)) as Type, typeArguments[i] ) }.toMap()
+            val genericType = resolveTypeExpression(type.target)
+            val substitutions = def.typeParamsNames.mapIndexed { i, _ ->
+                Pair(
+                    Type.TypeParam(TermLocation.TypeParamRef(def, i)) as Type,
+                    typeArguments[i]
+                )
+            }.toMap()
             specializeType(genericType, substitutions)
         }
         is TypeExpr.PrimitiveType -> Type.PrimitiveType(type.primitiveType)
-        is TypeExpr.RecordType -> Type.RecordType(elements = type.elements.map { (i, t) -> Pair(i, resolveType(t)) })
-        is TypeExpr.TupleType -> Type.TupleType(elements = type.elements.map { t -> resolveType(t) })
-        is TypeExpr.ArrayType -> Type.ArrayType(elementType = resolveType(type.elementType), size = type.size)
-        is TypeExpr.EnumType -> Type.EnumType(elements = type.elements.map { (i, t) -> Pair(i, resolveType(t)) })
-        is TypeExpr.FnType -> Type.FnType(dom = resolveType(type.dom), codom = resolveType(type.codom))
+        is TypeExpr.RecordType -> Type.RecordType(elements = type.elements.map { (i, t) ->
+            Pair(
+                i,
+                resolveTypeExpression(t)
+            )
+        })
+        is TypeExpr.TupleType -> Type.TupleType(elements = type.elements.map { t -> resolveTypeExpression(t) })
+        is TypeExpr.ArrayType -> Type.ArrayType(elementType = resolveTypeExpression(type.elementType), size = type.size)
+        is TypeExpr.EnumType -> Type.EnumType(elements = type.elements.map { (i, t) ->
+            Pair(
+                i,
+                resolveTypeExpression(t)
+            )
+        })
+        is TypeExpr.FnType -> Type.FnType(
+            dom = resolveTypeExpression(type.dom),
+            codom = resolveTypeExpression(type.codom)
+        )
     }
 
     fun typeInstruction(inst: Instruction) {
@@ -534,5 +629,15 @@ class TypeChecker(val module: Module) {
             is Type.TypeParam -> throw Exception("Can't project on type parameters")
             else -> throw Exception("Can't project on ${type.javaClass.simpleName}")
         }
+    }
+
+    fun Type.containsUnboundTypeParams(): Boolean {
+        val typeParams = findTypeParams(this)
+        for (tp in typeParams) {
+            val currentDef = current_frame().def
+            if (tp.def != currentDef)
+                return true
+        }
+        return false
     }
 }

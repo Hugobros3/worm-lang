@@ -2,6 +2,9 @@ package boneless.type
 
 fun isSubtype(T: Type, S: Type): Boolean {
     return when {
+        S == Type.Top -> true
+        T == S -> true
+
         // A definite array is a subtype of a tuple type iff that tuple type is not unit, and it has the same data layout as the definite array
         T is Type.ArrayType && S is Type.TupleType && T.isDefinite && T.size == S.elements.size && S.elements.all { it == T.elementType } -> true
         // And vice versa
@@ -12,6 +15,8 @@ fun isSubtype(T: Type, S: Type): Boolean {
 
         // A record type T is a subtype of another record type S iff the elements in T are a superset of the elements in S
         T is Type.RecordType && S is Type.RecordType && T.elements.containsAll(S.elements) -> true
+
+        T is Type.FnType && S is Type.FnType && isSubtype(S.dom, T.dom) && isSubtype(T.codom, S.codom) -> true
         else -> false
     }
 }

@@ -29,8 +29,8 @@ private class PrettyPrinter(val resugarizePrefixAndInfixSymbols: Boolean = true,
     fun Module.print() = defs.joinToString("\n") { it.print() }
     fun Def.print(): String {
         var poly = ""
-        if (typeParams.isNotEmpty()) {
-            poly = "forall " + typeParams.joinToString(", ") { it } + "\n"
+        if (typeParamsNames.isNotEmpty()) {
+            poly = "forall " + typeParamsNames.joinToString(", ") { it } + "\n"
         }
         return poly + when(body) {
             is Def.DefBody.ExprBody -> "def $identifier" + body.annotatedType.printTypeAnnotation() + " = " + body.expr.print(0)
@@ -148,7 +148,7 @@ private class PrettyPrinter(val resugarizePrefixAndInfixSymbols: Boolean = true,
         this is Type.EnumType -> "[" + elements.joinToString(" | ") { (name, type) -> name + "=" + type.print() } + "]"
         this is Type.FnType -> "fn " + dom.print() + " -> " + codom.print()
         this is Type.NominalType -> name
-        this is Type.TypeParam -> bound.def.typeParams[bound.index]
+        this is Type.TypeParam -> bound.def.typeParamsNames[bound.index]
         else -> throw Exception("Unprintable type")
     }
 

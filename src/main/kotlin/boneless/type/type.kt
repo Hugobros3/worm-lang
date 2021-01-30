@@ -18,6 +18,7 @@ sealed class Type {
     data class NominalType(val name: Identifier, val dataType: Type): Type()
     data class FnType(val dom: Type, val codom: Type, val constructorFor: NominalType? = null, val builtin: BuiltinFn? = null) : Type()
     data class TypeParam(val bound: TermLocation.TypeParamRef) : Type()
+    object Top : Type()
 }
 
 fun unit_type() = Type.TupleType(emptyList())

@@ -12,6 +12,9 @@ fun findInstance(module: Module, contractDef: Def, typeArguments: List<Type>): D
     for (def in module.defs) {
         if (def.body is Def.DefBody.Instance) {
             if (get_def(def.body.contractId.resolved) == contractDef) {
+                if (typeArguments.size != def.body.arguments.size)
+                    throw Exception("Wrong number of type arguments: needed ${def.body.arguments.size} got ${typeArguments.size}")
+
                 loop@ for (i in typeArguments.indices) {
                     val instance_arg: Type = def.body.arguments[i]
                     val supplied_arg: Type = typeArguments[i]

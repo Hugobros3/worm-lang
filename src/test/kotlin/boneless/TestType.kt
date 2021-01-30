@@ -182,7 +182,6 @@ class TestType {
         """.trimIndent())
         }
 
-
         testType("""
             forall T
             contract Foo = [
@@ -207,6 +206,34 @@ class TestType {
             data Pair = [first = T1, second = T2];
             
             fn sum_pair(p: Pair::(I32, I32)) => p.first + p.second;
+        """.trimIndent())
+    }
+
+    @Test
+    fun testTypeArgsInference() {
+        testType("""
+            forall T
+            fn mk_pair (a: T) => (a, a);
+            
+            fn f() => {
+                mk_pair (2);
+            };
+        """.trimIndent())
+
+        testType("""
+            forall T
+            contract Foo = [
+                fooerize = fn T -> I32
+            ];
+            
+            forall T
+            instance Foo::T = (
+                fooerize = fn t => 0
+            );
+            
+            fn f() => {
+                Foo.fooerize 96
+            };
         """.trimIndent())
     }
 }

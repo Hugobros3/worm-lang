@@ -42,6 +42,7 @@ class Emitter(val modules: List<Module>, val outputDir: File) {
             is Type.EnumType -> TODO()
             is Type.NominalType -> TODO()
             is Type.FnType -> TODO()
+            is Type.Top -> TODO("java/lang/object")
         }
     }
 
@@ -60,6 +61,7 @@ class Emitter(val modules: List<Module>, val outputDir: File) {
         is Type.EnumType -> TODO()
         is Type.NominalType -> "BL_${type.name}"
         is Type.FnType -> throw Exception("Not a data type")
+        is Type.Top -> TODO("java/lang/object")
     }
 
     fun tuple_type_init_descriptor(tupleType: Type.TupleType) = MethodDescriptor(tupleType.elements.mapNotNull { getFieldDescriptor(it) }, ReturnDescriptor.NonVoidDescriptor(getFieldDescriptor(tupleType)!!))

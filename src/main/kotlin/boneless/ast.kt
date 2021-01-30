@@ -10,7 +10,7 @@ import boneless.type.typeable
 typealias Identifier = String
 
 data class Module(val name: Identifier, val defs: Set<Def>)
-data class Def(val identifier: Identifier, val body: DefBody, val typeParams: List<Identifier>) : Typeable by typeable() {
+data class Def(val identifier: Identifier, val body: DefBody, val typeParamsNames: List<Identifier>) : Typeable by typeable() {
     sealed class DefBody {
         data class ExprBody(val expr: Expression, val annotatedType: TypeExpr?): DefBody()
         data class DataCtor(val datatype: TypeExpr): DefBody() {
@@ -27,6 +27,7 @@ data class Def(val identifier: Identifier, val body: DefBody, val typeParams: Li
     }
 
     val is_type: Boolean = body is DefBody.TypeAlias
+    lateinit var typeParams: List<Type>
 }
 
 sealed class Instruction {
@@ -59,7 +60,10 @@ sealed class Expression : Typeable by typeable() {
     data class QuoteLiteral(val literal: Literal) : Expression()
     data class QuoteType(val quotedType: TypeExpr) : Expression()
 
-    data class IdentifierRef(val id: BindPoint) : Expression()
+    data class IdentifierRef(val id: BindPoint) : Expression() {
+        /** Inferred by the type checker */
+        var deducedImplicitSpecializationArguments: List<Type>? = null
+    }
     data class ExprSpecialization(val target: IdentifierRef, val arguments: List<TypeExpr>) : Expression()
 
     data class ListExpression(val elements: List<Expression>, val is_synthesized_invocation_argument_list: Boolean = false) : Expression()
@@ -76,6 +80,8 @@ sealed class Expression : Typeable by typeable() {
     data class Sequence(val instructions: List<Instruction>, val yieldExpression: Expression?) : Expression()
     data class Conditional(val condition: Expression, val ifTrue: Expression, val ifFalse: Expression) : Expression()
     data class WhileLoop(val loopCondition: Expression, val body: Expression) : Expression()
+
+    var deducedImplicitCast: Type? = null
 }
 
 sealed class TypeExpr {
