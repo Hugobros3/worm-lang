@@ -26,6 +26,11 @@ sealed class TermLocation {
     }
 }
 
+fun get_def(loc: TermLocation): Def? = when(loc) {
+    is TermLocation.DefRef -> loc.def
+    else -> null
+}
+
 fun bind(module: Module) {
     for (def in module.defs) {
         BindHelper(module).bind(def)
@@ -81,7 +86,7 @@ class BindHelper(private val module: Module) {
             is Def.DefBody.Contract -> bind(def.body.payload)
             is Def.DefBody.Instance -> {
                 def.body.contractId.resolved_ = this[def.body.contractId.identifier]
-                def.body.typeArgs.forEach(::bind)
+                def.body.argumentsExpr.forEach(::bind)
                 bind(def.body.body)
             }
             else -> throw Exception("Unhandled ast node ${def.body}")

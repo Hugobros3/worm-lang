@@ -168,6 +168,36 @@ class TestType {
                 Foo::I32.fooerize 96
             };
         """.trimIndent())
+
+        expectFailure {
+            testType("""
+            forall T
+            contract Foo = [
+                fooerize = fn T -> I32
+            ];
+            
+            fn g() => {
+                Foo::I32.fooerize 96
+            };
+        """.trimIndent())
+        }
+
+
+        testType("""
+            forall T
+            contract Foo = [
+                fooerize = fn T -> I32
+            ];
+            
+            forall T
+            instance Foo::T = (
+                fooerize = fn t => 0
+            );
+            
+            fn g() => {
+                Foo::I32.fooerize 96
+            };
+        """.trimIndent())
     }
 
     @Test

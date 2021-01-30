@@ -43,7 +43,7 @@ private class PrettyPrinter(val resugarizePrefixAndInfixSymbols: Boolean = true,
                     param.print() + " -> " + returnTypeAnnotation.print() + " = " + body.print()
             }
             is Def.DefBody.Contract -> "contract $identifier = ${body.payload.print()}"
-            is Def.DefBody.Instance -> "instance ${body.contractId.identifier}::" + (if (body.typeArgs.size == 1) body.typeArgs[0].print() else ( "(" + body.typeArgs.joinToString(", ") { it.print() } + ")" )) + " = " + body.body.print(0)
+            is Def.DefBody.Instance -> "instance ${body.contractId.identifier}::" + (if (body.argumentsExpr.size == 1) body.argumentsExpr[0].print() else ( "(" + body.argumentsExpr.joinToString(", ") { it.print() } + ")" )) + " = " + body.body.print(0)
         } + ";"
     }
 

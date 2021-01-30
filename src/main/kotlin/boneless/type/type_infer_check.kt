@@ -2,6 +2,7 @@ package boneless.type
 
 import boneless.*
 import boneless.bind.TermLocation
+import boneless.bind.get_def
 import boneless.util.prettyPrint
 
 fun Type.normalize(): Type = when {
@@ -97,11 +98,6 @@ class TypeChecker(val module: Module) {
         }
     }
 
-    fun get_def(loc: TermLocation): Def? = when(loc) {
-        is TermLocation.DefRef -> loc.def
-        else -> null
-    }
-
     fun inferDef(def: Def): Type {
         return when (val body = def.body) {
             is Def.DefBody.ExprBody -> {
@@ -128,7 +124,9 @@ class TypeChecker(val module: Module) {
                 contract_def?.body as? Def.DefBody.Contract ?: throw Exception("Instances must reference contract definitions")
                 val contract_type = infer(contract_def)
 
-                val substitutions = contract_def.typeParams.mapIndexed { i, _ -> Pair(Type.TypeParam(TermLocation.TypeParamRef(contract_def, i)) as Type, resolveType( body.typeArgs[i]) ) }.toMap()
+                body.arguments = body.argumentsExpr.map { resolveType( it) }
+
+                val substitutions = contract_def.typeParams.mapIndexed { i, _ -> Pair(Type.TypeParam(TermLocation.TypeParamRef(contract_def, i)) as Type, body.arguments[i] ) }.toMap()
 
                 val specializedType = specializeType(contract_type, substitutions)
                 check(body.body, specializedType)
@@ -157,8 +155,14 @@ class TypeChecker(val module: Module) {
                 val def = (expr.target.id.resolved as? TermLocation.DefRef)?.def ?: throw Exception("Can only specialize defs")
                 if (def.typeParams.size != expr.arguments.size)
                     throw Exception("Given ${expr.arguments} arguments but ${def.identifier} only has ${def.typeParams.size} type arguments")
+
+                val typeArguments = expr.arguments.map { resolveType( it) }
+
+                if (def.body is Def.DefBody.Contract)
+                    findInstance(module, def, typeArguments) ?: throw Exception("No instance for contract ${def.identifier} with type arguments ${typeArguments.map { it.prettyPrint() }}")
+
                 val genericType = infer(def)
-                val substitutions = def.typeParams.mapIndexed { i, p -> Pair(Type.TypeParam(TermLocation.TypeParamRef(def, i)) as Type, resolveType( expr.arguments[i]) ) }.toMap()
+                val substitutions = def.typeParams.mapIndexed { i, _ -> Pair(Type.TypeParam(TermLocation.TypeParamRef(def, i)) as Type, typeArguments[i] ) }.toMap()
                 specializeType(genericType, substitutions)
             }
             is Expression.ListExpression -> {
@@ -493,8 +497,13 @@ class TypeChecker(val module: Module) {
             val def = (type.target.callee.resolved as? TermLocation.DefRef)?.def ?: throw Exception("Can only specialize defs")
             if (def.typeParams.size != type.arguments.size)
                 throw Exception("Given ${type.arguments} arguments but ${def.identifier} only has ${def.typeParams.size} type arguments")
+            val typeArguments = type.arguments.map { resolveType( it) }
+
+            if (def.body is Def.DefBody.Contract)
+                findInstance(module, def, typeArguments) ?: throw Exception("No instance for contract ${def.identifier} with type arguments ${typeArguments.map { it.prettyPrint() }}")
+
             val genericType = resolveType(type.target)
-            val substitutions = def.typeParams.mapIndexed { i, p -> Pair(Type.TypeParam(TermLocation.TypeParamRef(def, i)) as Type, resolveType( type.arguments[i]) ) }.toMap()
+            val substitutions = def.typeParams.mapIndexed { i, _ -> Pair(Type.TypeParam(TermLocation.TypeParamRef(def, i)) as Type, typeArguments[i] ) }.toMap()
             specializeType(genericType, substitutions)
         }
         is TypeExpr.PrimitiveType -> Type.PrimitiveType(type.primitiveType)
