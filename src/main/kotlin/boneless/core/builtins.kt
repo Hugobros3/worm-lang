@@ -5,10 +5,12 @@ import boneless.parse.Parser
 import boneless.parse.Tokenizer
 
 enum class BuiltinFn(type_str: String) {
-    Add("fn [I32, I32] -> I32"),
-    Multiply("fn [I32, I32] -> I32"),
-    Subtract("fn [I32, I32] -> I32"),
-    Negate("fn I32 -> I32"),
+    jvm_add_i32("fn [I32, I32] -> I32"),
+    jvm_sub_i32("fn [I32, I32] -> I32"),
+    jvm_mul_i32("fn [I32, I32] -> I32"),
+    jvm_div_i32("fn [I32, I32] -> I32"),
+    jvm_mod_i32("fn [I32, I32] -> I32"),
+    jvm_neg_i32("fn I32 -> I32"),
     ;
 
     val typeExpr: TypeExpr

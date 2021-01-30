@@ -1,5 +1,6 @@
 package boneless
 
+import boneless.core.prelude_math
 import boneless.parse.Parser
 import boneless.parse.Tokenizer
 import boneless.util.prettyPrint
@@ -223,5 +224,10 @@ class TestParser {
             
             fn sum_pair(p: Pair::(I32, I32)) => p.first + p.second;
         """.trimIndent())
+    }
+
+    @Test
+    fun testPrelude() {
+        testModule(prelude_math)
     }
 }

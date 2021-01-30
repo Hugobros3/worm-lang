@@ -89,12 +89,8 @@ sealed class TypeExpr {
     data class TypeNameRef(val callee: BindPoint) : TypeExpr()
     data class TypeSpecialization(val target: TypeNameRef, val arguments: List<TypeExpr>) : TypeExpr()
     data class RecordType(val elements: List<Pair<Identifier, TypeExpr>>) : TypeExpr()
-    data class TupleType(val elements: List<TypeExpr>) : TypeExpr() {
-        val isUnit: Boolean get() = elements.isEmpty()
-    }
-    data class ArrayType(val elementType: TypeExpr, val size: Int) : TypeExpr() {
-        val isDefinite: Boolean get() = size != 0
-    }
+    data class TupleType(val elements: List<TypeExpr>) : TypeExpr()
+    data class ArrayType(val elementType: TypeExpr, val size: Int) : TypeExpr()
     data class EnumType(val elements: List<Pair<Identifier, TypeExpr>>) : TypeExpr()
     data class FnType(val dom: TypeExpr, val codom: TypeExpr) : TypeExpr()
 }

@@ -82,8 +82,8 @@ private class PrettyPrinter(val resugarizePrefixAndInfixSymbols: Boolean = true,
             is Expression.Invocation -> {
                 val callee = callee
                 if (resugarizePrefixAndInfixSymbols && callee is Expression.IdentifierRef) {
-                    val prefix = PrefixOperator.values().find { it.rewrite == callee.id.identifier }
-                    val infix = InfixOperator.values().find { it.rewrite == callee.id.identifier }
+                    val prefix = PrefixOperator.values().find { it.rewrite_ == callee.id.identifier }
+                    val infix = InfixOperator.values().find { it.rewrite_ == callee.id.identifier }
                     if (prefix != null) {
                         return prefix.token.str + arg.print(9999)
                     } else if (infix != null) {

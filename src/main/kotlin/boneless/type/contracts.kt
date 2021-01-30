@@ -7,7 +7,6 @@ import boneless.bind.get_def
 /** Finds an instance that corresponds to the contract and the type arguments. */
 fun findInstance(module: Module, contractDef: Def, typeArguments: List<Type>): Def? {
     // TODO take bounds on the type arguments into consideration
-    // TODO inference
     outer@
     for (def in module.defs) {
         if (def.body is Def.DefBody.Instance) {

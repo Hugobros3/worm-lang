@@ -65,6 +65,17 @@ class TestType {
         }
 
         testType("""
+            fn f() => {
+                let x1 = (- 6);
+                let x2 = (3 + 6);
+                let x3 = (3 - 6);
+                let x4 = (3 * 6);
+                let x5 = (3 / 6);
+                let x6 = (3 % 6);
+            };
+        """.trimIndent())
+
+        testType("""
             fn pow2(x: I32) => x * x;
             
             data Pos = [I32, I32];

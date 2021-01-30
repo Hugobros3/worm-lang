@@ -414,14 +414,7 @@ class Parser(private val inputAsText: String, private val tokens: List<Tokenizer
             //if (prefix.token == Keyword.Minus && i + 1 < tokens.size && tokens[i + 1].tokenName == "NumLit")
             //    continue
             if (accept(prefix.token.str)) {
-                return Expression.Invocation(
-                    Expression.IdentifierRef(
-                        BindPoint.new(
-                            prefix.rewrite
-                        )
-                    ),
-                    acceptPrefixedPrimaryExpr()!!
-                )
+                return Expression.Invocation(prefix.rewrite()!!, acceptPrefixedPrimaryExpr()!!)
             }
         }
         return acceptPrimaryExpression()
@@ -473,11 +466,7 @@ class Parser(private val inputAsText: String, private val tokens: List<Tokenizer
                             else -> {
                                 val rhs = expectExpression(infix.priority)
                                 accumulator = Expression.Invocation(
-                                    Expression.IdentifierRef(
-                                        BindPoint.new(
-                                            infix.rewrite!!
-                                        )
-                                    ),
+                                            infix.rewrite()!!,
                                     Expression.ListExpression(listOf(
                                         accumulator,
                                         rhs
@@ -607,4 +596,8 @@ class Parser(private val inputAsText: String, private val tokens: List<Tokenizer
         expect("EOF")
         return type
     }
+}
+
+fun createModule(moduleName: String, implementation: String): Module {
+    return Parser(implementation, Tokenizer(implementation).tokenize()).parseModule(moduleName)
 }

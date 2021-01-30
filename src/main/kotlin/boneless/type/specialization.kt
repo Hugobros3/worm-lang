@@ -62,13 +62,13 @@ fun idk(expr: Expression, target: Expression): Map<TermLocation.TypeParamRef, Ty
 }
 
 fun unify(type: Type, expected: Type): Map<Type, Type> = when {
+    expected is Type.Top -> emptyMap()
     type is Type.TypeParam -> mapOf(type to expected)
     type is Type.FnType && expected is Type.FnType -> unifyConstraints(unify(type.dom, expected.dom), unify(type.codom, expected.codom))
-    expected is Type.Top -> emptyMap()
+    type is Type.TupleType && expected is Type.TupleType -> type.elements.zip(expected.elements).map { (l, r) -> unify(l, r) }.fold(emptyMap(), ::unifyConstraints)
     else -> TODO()
     /*type is Type.PrimitiveType -> TODO()
     type is Type.RecordType -> TODO()
-    type is Type.TupleType -> TODO()
     type is Type.ArrayType -> TODO()
     type is Type.EnumType -> TODO()
     type is Type.NominalType -> TODO()

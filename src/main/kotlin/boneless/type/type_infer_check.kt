@@ -337,12 +337,21 @@ class TypeChecker(val module: Module) {
                 Type.RecordType(checked)
             }
             is Expression.Invocation -> {
-                val targetType = infer(expr.callee)
-                if (targetType !is Type.FnType)
-                    type_error("invocation callee is not a function $targetType")
-                check(expr.arg, targetType.dom)
-                expect(targetType.codom, expected_type)
-                targetType.codom
+                if (needTypeParamInference(expr.callee)) {
+                    val argsType = infer(expr.arg)
+                    val targetType = check(expr.callee, Type.FnType(argsType, Type.Top))
+                    if (targetType !is Type.FnType)
+                        throw Exception("invocation callee is not a function $targetType")
+                    expect(targetType.codom, expected_type)
+                    targetType.codom
+                } else {
+                    val targetType = infer(expr.callee)
+                    if (targetType !is Type.FnType)
+                        type_error("invocation callee is not a function $targetType")
+                    check(expr.arg, targetType.dom)
+                    expect(targetType.codom, expected_type)
+                    targetType.codom
+                }
             }
             is Expression.Function -> {
                 if (expected_type !is Type.FnType)

@@ -2,11 +2,15 @@ package boneless.bind
 
 import boneless.*
 import boneless.core.BuiltinFn
+import boneless.core.prelude_modules
 
-data class BindPoint private constructor(val identifier: Identifier, internal var resolved_: TermLocation? = null) {
-    val resolved: TermLocation get() = resolved_ ?: throw Exception("This bind point was not resolved, did the bind pass run ?")
+data class BindPoint private constructor(val identifier: Identifier) {
+    internal var resolved_: TermLocation? = null
+    val resolved: TermLocation
+        get() = resolved_ ?: throw Exception("This bind point was not resolved, did the bind pass run ?")
+
     companion object {
-        fun new(id: Identifier) = BindPoint(id, null)
+        fun new(id: Identifier) = BindPoint(id)
     }
 }
 
@@ -19,14 +23,10 @@ sealed class TermLocation {
         override fun toString(): String {
             return def.typeParamsNames[index]
         }
-
-        override fun hashCode(): Int {
-            return def.identifier.hashCode() xor index
-        }
     }
 }
 
-fun get_def(loc: TermLocation): Def? = when(loc) {
+fun get_def(loc: TermLocation): Def? = when (loc) {
     is TermLocation.DefRef -> loc.def
     else -> null
 }
@@ -62,10 +62,19 @@ class BindHelper(private val module: Module) {
 
     init {
         push()
+
         for (builtin_fn in BuiltinFn.values()) {
             this[builtin_fn.name.toLowerCase()] =
                 TermLocation.BuiltinRef(builtin_fn)
         }
+        if (!module.name.startsWith("Prelude"))
+            for (prelude_mod in prelude_modules) {
+                for (def in prelude_mod.defs) {
+                    if (def.body !is Def.DefBody.Instance)
+                        this[def.identifier] = TermLocation.DefRef(def)
+                }
+            }
+
         for (def in module.defs) {
             if (def.body !is Def.DefBody.Instance)
                 this[def.identifier] = TermLocation.DefRef(def)
@@ -78,7 +87,7 @@ class BindHelper(private val module: Module) {
             this[typeParam] = TermLocation.TypeParamRef(def, i)
         }
 
-        when(def.body) {
+        when (def.body) {
             is Def.DefBody.ExprBody -> bind(def.body.expr)
             is Def.DefBody.DataCtor -> bind(def.body.datatype)
             is Def.DefBody.TypeAlias -> bind(def.body.aliasedType)
@@ -107,15 +116,22 @@ class BindHelper(private val module: Module) {
 
     fun bind(expr: Expression) {
         when (expr) {
-            is Expression.QuoteLiteral -> {}
+            is Expression.QuoteLiteral -> {
+            }
             is Expression.QuoteType -> bind(expr.quotedType)
 
-            is Expression.Cast -> { bind(expr.expr); bind(expr.destinationType) }
-            is Expression.Ascription -> { bind(expr.expr); bind(expr.ascribedType) }
+            is Expression.Cast -> {
+                bind(expr.expr); bind(expr.destinationType)
+            }
+            is Expression.Ascription -> {
+                bind(expr.expr); bind(expr.ascribedType)
+            }
 
             is Expression.ListExpression -> expr.elements.forEach(::bind)
             is Expression.RecordExpression -> expr.fields.forEach { bind(it.second) }
-            is Expression.Invocation -> { bind(expr.callee) ; bind(expr.arg) }
+            is Expression.Invocation -> {
+                bind(expr.callee); bind(expr.arg)
+            }
 
             is Expression.Conditional -> {
                 bind(expr.condition)
@@ -136,7 +152,7 @@ class BindHelper(private val module: Module) {
                 push()
                 for (i in expr.instructions)
                     bind(i)
-                if(expr.yieldExpression != null)
+                if (expr.yieldExpression != null)
                     bind(expr.yieldExpression)
                 pop()
             }
@@ -155,10 +171,16 @@ class BindHelper(private val module: Module) {
     }
 
     fun bind(type: TypeExpr) {
-        when(type) {
-            is TypeExpr.RecordType -> { type.elements.forEach { bind(it.second) } }
-            is TypeExpr.EnumType -> { type.elements.forEach { bind(it.second) } }
-            is TypeExpr.TupleType -> { type.elements.forEach(::bind) }
+        when (type) {
+            is TypeExpr.RecordType -> {
+                type.elements.forEach { bind(it.second) }
+            }
+            is TypeExpr.EnumType -> {
+                type.elements.forEach { bind(it.second) }
+            }
+            is TypeExpr.TupleType -> {
+                type.elements.forEach(::bind)
+            }
             is TypeExpr.ArrayType -> bind(type.elementType)
             is TypeExpr.TypeNameRef -> {
                 type.callee.resolved_ = this[type.callee.identifier]
@@ -167,18 +189,22 @@ class BindHelper(private val module: Module) {
                 bind(type.target)
                 type.arguments.forEach(::bind)
             }
-            is TypeExpr.PrimitiveType -> {}
-            is TypeExpr.FnType -> { bind(type.dom) ; bind(type.codom)}
+            is TypeExpr.PrimitiveType -> {
+            }
+            is TypeExpr.FnType -> {
+                bind(type.dom); bind(type.codom)
+            }
             else -> throw Exception("Unhandled ast node $type")
         }
     }
 
     fun bind(pattern: Pattern) {
-        when(pattern) {
+        when (pattern) {
             is Pattern.BinderPattern -> {
                 this[pattern.id] = TermLocation.BinderRef(pattern)
             }
-            is Pattern.LiteralPattern -> {}
+            is Pattern.LiteralPattern -> {
+            }
             is Pattern.ListPattern -> pattern.elements.forEach(::bind)
             is Pattern.RecordPattern -> pattern.fields.forEach { bind(it.second) }
             is Pattern.CtorPattern -> {
