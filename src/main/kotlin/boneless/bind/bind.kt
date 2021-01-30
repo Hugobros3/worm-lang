@@ -2,19 +2,20 @@ package boneless.bind
 
 import boneless.*
 import boneless.core.BuiltinFn
-import boneless.type.Type
 
-data class BindPoint private constructor(val identifier: Identifier, internal var resolved_: BoundIdentifier? = null) {
-    val resolved: BoundIdentifier get() = resolved_ ?: throw Exception("This bind point was not resolved, did the bind pass run ?")
+data class BindPoint private constructor(val identifier: Identifier, internal var resolved_: TermLocation? = null) {
+    val resolved: TermLocation get() = resolved_ ?: throw Exception("This bind point was not resolved, did the bind pass run ?")
     companion object {
         fun new(id: Identifier) = BindPoint(id, null)
     }
 }
 
-sealed class BoundIdentifier {
-    data class ToDef(val def: Def) : BoundIdentifier()
-    data class ToPatternBinder(val binder: Pattern.BinderPattern) : BoundIdentifier()
-    data class ToBuiltinFn(val fn: BuiltinFn) : BoundIdentifier()
+/** Contains information to locate the AST node referenced by an identifier */
+sealed class TermLocation {
+    data class DefRef(val def: Def) : TermLocation()
+    data class BinderRef(val binder: Pattern.BinderPattern) : TermLocation()
+    data class BuiltinRef(val fn: BuiltinFn) : TermLocation()
+    data class TypeParamRef(val def: Def, val index: Int) : TermLocation()
 }
 
 fun bind(module: Module) {
@@ -24,12 +25,12 @@ fun bind(module: Module) {
 }
 
 class BindHelper(private val module: Module) {
-    private val scopes = mutableListOf<MutableList<Pair<Identifier, BoundIdentifier>>>()
+    private val scopes = mutableListOf<MutableList<Pair<Identifier, TermLocation>>>()
 
     fun push() = scopes.add(0, mutableListOf())
     fun pop() = scopes.removeAt(0)
 
-    operator fun get(id: Identifier): BoundIdentifier {
+    operator fun get(id: Identifier): TermLocation {
         // TODO could be cool to get Levenshtein distance in there
         for (scope in scopes.reversed()) {
             val match = scope.find { it.first == id } ?: continue
@@ -38,7 +39,7 @@ class BindHelper(private val module: Module) {
         throw Exception("unbound identifier: $id")
     }
 
-    operator fun set(id: Identifier, bindTo: BoundIdentifier) {
+    operator fun set(id: Identifier, bindTo: TermLocation) {
         for (scope in scopes.reversed()) {
             val match = scope.find { it.first == id } ?: continue
             throw Exception("shadowed identifier: $id")
@@ -50,14 +51,19 @@ class BindHelper(private val module: Module) {
         push()
         for (builtin_fn in BuiltinFn.values()) {
             this[builtin_fn.name.toLowerCase()] =
-                BoundIdentifier.ToBuiltinFn(builtin_fn)
+                TermLocation.BuiltinRef(builtin_fn)
         }
         for (def in module.defs) {
-            this[def.identifier] = BoundIdentifier.ToDef(def)
+            this[def.identifier] = TermLocation.DefRef(def)
         }
     }
 
     internal fun bind(def: Def) {
+        push()
+        for ((i, typeParam) in def.typeParams.withIndex()) {
+            this[typeParam] = TermLocation.TypeParamRef(def, i)
+        }
+
         when(def.body) {
             is Def.DefBody.ExprBody -> bind(def.body.expr)
             is Def.DefBody.DataCtor -> bind(def.body.datatype)
@@ -65,6 +71,7 @@ class BindHelper(private val module: Module) {
             is Def.DefBody.FnBody -> bind(def.body.fn)
             else -> throw Exception("Unhandled ast node ${def.body}")
         }
+        pop()
     }
 
     fun bind(inst: Instruction) {
@@ -116,6 +123,10 @@ class BindHelper(private val module: Module) {
             is Expression.IdentifierRef -> {
                 expr.id.resolved_ = this[expr.id.identifier]
             }
+            is Expression.ExprSpecialization -> {
+                bind(expr.target)
+                expr.arguments.forEach(::bind)
+            }
             else -> throw Exception("Unhandled ast node $expr")
         }
     }
@@ -128,7 +139,10 @@ class BindHelper(private val module: Module) {
             is TypeExpr.ArrayType -> bind(type.elementType)
             is TypeExpr.TypeNameRef -> {
                 type.callee.resolved_ = this[type.callee.identifier]
-                //type.args.forEach(::bind)
+            }
+            is TypeExpr.TypeSpecialization -> {
+                bind(type.target)
+                type.arguments.forEach(::bind)
             }
             is TypeExpr.PrimitiveType -> {}
             is TypeExpr.FnType -> { bind(type.dom) ; bind(type.codom)}
@@ -139,7 +153,7 @@ class BindHelper(private val module: Module) {
     fun bind(pattern: Pattern) {
         when(pattern) {
             is Pattern.BinderPattern -> {
-                this[pattern.id] = BoundIdentifier.ToPatternBinder(pattern)
+                this[pattern.id] = TermLocation.BinderRef(pattern)
             }
             is Pattern.LiteralPattern -> {}
             is Pattern.ListPattern -> pattern.elements.forEach(::bind)

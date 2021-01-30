@@ -1,7 +1,7 @@
 package boneless.type
 
 import boneless.*
-import boneless.bind.BoundIdentifier
+import boneless.bind.TermLocation
 import boneless.util.prettyPrint
 
 fun Type.normalize(): Type = when {
@@ -125,9 +125,10 @@ class TypeChecker(val module: Module) {
             is Expression.QuoteType -> TODO()
             is Expression.IdentifierRef -> {
                 when (val r = expr.id.resolved) {
-                    is BoundIdentifier.ToDef -> infer(r.def)
-                    is BoundIdentifier.ToPatternBinder -> infer(r.binder)
-                    is BoundIdentifier.ToBuiltinFn -> resolveType(r.fn.typeExpr)
+                    is TermLocation.DefRef -> infer(r.def)
+                    is TermLocation.BinderRef -> infer(r.binder)
+                    is TermLocation.BuiltinRef -> resolveType(r.fn.typeExpr)
+                    is TermLocation.TypeParamRef -> Type.TypeParam(r)
                 }
             }
             is Expression.ExprSpecialization -> {
@@ -193,11 +194,12 @@ class TypeChecker(val module: Module) {
             is Expression.IdentifierRef -> {
                 expect(
                     when (val r = expr.id.resolved) {
-                        is BoundIdentifier.ToDef -> infer(r.def,)
-                        is BoundIdentifier.ToPatternBinder -> infer(r.binder)
-                        is BoundIdentifier.ToBuiltinFn -> {
+                        is TermLocation.DefRef -> infer(r.def,)
+                        is TermLocation.BinderRef -> infer(r.binder)
+                        is TermLocation.BuiltinRef -> {
                             resolveType(r.fn.typeExpr)
                         }
+                        is TermLocation.TypeParamRef -> Type.TypeParam(r)
                     }, expected_type
                 )
                 expected_type
@@ -408,11 +410,12 @@ class TypeChecker(val module: Module) {
         }
     }
 
-    fun inferTypeOfBinding(boundIdentifier: BoundIdentifier): Type? {
+    fun inferTypeOfBinding(boundIdentifier: TermLocation): Type? {
         return when (boundIdentifier) {
-            is BoundIdentifier.ToDef -> if (boundIdentifier.def.is_type) null else infer(boundIdentifier.def)
-            is BoundIdentifier.ToPatternBinder -> infer(boundIdentifier.binder)
-            is BoundIdentifier.ToBuiltinFn -> resolveType(boundIdentifier.fn.typeExpr)
+            is TermLocation.DefRef -> if (boundIdentifier.def.is_type) null else infer(boundIdentifier.def)
+            is TermLocation.BinderRef -> infer(boundIdentifier.binder)
+            is TermLocation.BuiltinRef -> resolveType(boundIdentifier.fn.typeExpr)
+            is TermLocation.TypeParamRef -> Type.TypeParam(boundIdentifier)
         }
     }
 
@@ -420,7 +423,7 @@ class TypeChecker(val module: Module) {
     fun resolveType(type: TypeExpr): Type = when (type) {
         is TypeExpr.TypeNameRef -> {
             when (val resolved = type.callee.resolved) {
-                is BoundIdentifier.ToDef -> {
+                is TermLocation.DefRef -> {
                     when (resolved.def.body) {
                         is Def.DefBody.ExprBody -> type_error("${type.callee.identifier} does not name a type")
                         is Def.DefBody.DataCtor -> {

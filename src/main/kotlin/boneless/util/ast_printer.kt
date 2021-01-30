@@ -144,7 +144,7 @@ private class PrettyPrinter(val resugarizePrefixAndInfixSymbols: Boolean = true,
         this is Type.EnumType -> "[" + elements.joinToString(" | ") { (name, type) -> name + "=" + type.print() } + "]"
         this is Type.FnType -> dom.print() + " -> " + codom.print()
         this is Type.NominalType -> name
-        this is Type.TypeParam -> identifier
+        this is Type.TypeParam -> bound.def.typeParams[bound.index]
         else -> throw Exception("Unprintable type")
     }
 

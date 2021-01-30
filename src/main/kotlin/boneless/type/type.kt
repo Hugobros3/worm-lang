@@ -2,6 +2,7 @@ package boneless.type
 
 import boneless.core.BuiltinFn
 import boneless.Identifier
+import boneless.bind.TermLocation
 
 /** Actual types, not AST type expressions */
 sealed class Type {
@@ -16,7 +17,7 @@ sealed class Type {
     data class EnumType(val elements: List<Pair<Identifier, Type>>) : Type()
     data class NominalType(val name: Identifier, val dataType: Type): Type()
     data class FnType(val dom: Type, val codom: Type, val constructorFor: NominalType? = null, val builtin: BuiltinFn? = null) : Type()
-    data class TypeParam(val identifier: Identifier) : Type()
+    data class TypeParam(val bound: TermLocation.TypeParamRef) : Type()
 }
 
 fun unit_type() = Type.TupleType(emptyList())

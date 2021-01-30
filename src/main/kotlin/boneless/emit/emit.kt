@@ -1,7 +1,7 @@
 package boneless.emit
 
 import boneless.*
-import boneless.bind.BoundIdentifier
+import boneless.bind.TermLocation
 import boneless.classfile.*
 import boneless.type.PrimitiveTypeEnum
 import boneless.type.Type
@@ -211,9 +211,9 @@ class Emitter(val modules: List<Module>, val outputDir: File) {
                 is Expression.QuoteLiteral -> emit(builder, expr.literal)
                 is Expression.QuoteType -> TODO()
                 is Expression.IdentifierRef -> when(val r = expr.id.resolved) {
-                    is BoundIdentifier.ToDef -> TODO()
-                    is BoundIdentifier.ToPatternBinder -> accessPtrn(r.binder)
-                    is BoundIdentifier.ToBuiltinFn -> throw Exception("Not allowed / (should not be) possible")
+                    is TermLocation.DefRef -> TODO()
+                    is TermLocation.BinderRef -> accessPtrn(r.binder)
+                    is TermLocation.BuiltinRef -> throw Exception("Not allowed / (should not be) possible")
                 }
                 is Expression.ListExpression -> {
                     when (val type = expr.type!!) {

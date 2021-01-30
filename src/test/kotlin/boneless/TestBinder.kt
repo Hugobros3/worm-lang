@@ -50,4 +50,16 @@ class TestBinder {
         data Rect = [Pos2D, Pos2D];
         """.trimIndent())
     }
+
+    @Test
+    fun testTypeParams() {
+        testBind("""
+            forall T
+            fn mk_pair (a: T, b: T) => (a, b);
+            
+            fn f() => {
+                mk_pair::[I32, I32](2, 3);
+            };
+        """.trimIndent())
+    }
 }
