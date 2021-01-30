@@ -97,6 +97,11 @@ class TypeChecker(val module: Module) {
         }
     }
 
+    fun get_def(loc: TermLocation): Def? = when(loc) {
+        is TermLocation.DefRef -> loc.def
+        else -> null
+    }
+
     fun inferDef(def: Def): Type {
         return when (val body = def.body) {
             is Def.DefBody.ExprBody -> {
@@ -117,8 +122,17 @@ class TypeChecker(val module: Module) {
             }
             is Def.DefBody.TypeAlias -> resolveType(body.aliasedType)
             is Def.DefBody.FnBody -> infer(body.fn)
-            is Def.DefBody.Contract -> TODO()
-            is Def.DefBody.Instance -> TODO()
+            is Def.DefBody.Contract -> resolveType(body.payload)
+            is Def.DefBody.Instance -> {
+                val contract_def = get_def(body.contractId.resolved)
+                contract_def?.body as? Def.DefBody.Contract ?: throw Exception("Instances must reference contract definitions")
+                val contract_type = infer(contract_def)
+
+                val substitutions = contract_def.typeParams.mapIndexed { i, _ -> Pair(Type.TypeParam(TermLocation.TypeParamRef(contract_def, i)) as Type, resolveType( body.typeArgs[i]) ) }.toMap()
+
+                val specializedType = specializeType(contract_type, substitutions)
+                check(body.body, specializedType)
+            }
         }
     }
 
@@ -222,11 +236,22 @@ class TypeChecker(val module: Module) {
                 if (expected_type !is Type.TupleType)
                     type_error("expected type of list expression is not a tuple")
                 if (expected_type.elements.size != expr.elements.size)
-                    type_error("expression has ${expr.elements.size} elements but exepected type ${expected_type.prettyPrint()} has ${expected_type.elements.size}")
+                    type_error("expression has ${expr.elements.size} elements but expected type ${expected_type.prettyPrint()} has ${expected_type.elements.size}")
                 val checked = expr.elements.zip(expected_type.elements).map { (e, et) -> check(e, et) }
                 Type.TupleType(checked)
             }
-            is Expression.RecordExpression -> TODO()
+            is Expression.RecordExpression -> {
+                if (expected_type !is Type.RecordType)
+                    type_error("expected type of record expression is not a record")
+                if (expected_type.elements.size != expr.fields.size)
+                    type_error("expression has ${expr.fields.size} elements but expected type ${expected_type.prettyPrint()} has ${expected_type.elements.size}")
+                val checked = expected_type.elements.mapIndexed { i, (fieldName, expFieldType) ->
+                    if (fieldName != expr.fields[i].first)
+                        throw Exception("Field names $fieldName and ${expr.fields[i].first} do not match")
+                    Pair(fieldName, check(expr.fields[i].second, expFieldType))
+                }
+                Type.RecordType(checked)
+            }
             is Expression.Invocation -> {
                 val targetType = infer(expr.callee)
                 if (targetType !is Type.FnType)
@@ -235,7 +260,13 @@ class TypeChecker(val module: Module) {
                 expect(targetType.codom, expected_type)
                 targetType.codom
             }
-            is Expression.Function -> TODO()
+            is Expression.Function -> {
+                if (expected_type !is Type.FnType)
+                    type_error("expected type of fn expression is not a function type")
+                val dom = check(expr.param, expected_type.dom)
+                val codom = check(expr.body, expected_type.codom)
+                Type.FnType(dom, codom)
+            }
             is Expression.Ascription -> TODO()
             is Expression.Cast -> TODO()
             is Expression.Sequence -> {

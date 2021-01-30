@@ -146,4 +146,24 @@ class TestType {
             };
         """.trimIndent())
     }
+
+    @Test
+    fun testContracts() {
+        testType("""
+            forall T
+            contract Foo = [
+                fooerize = fn T -> I32
+            ];
+            
+            instance Foo::I32 = (
+                fooerize = fn t => t
+            );
+            
+            fn f() => {
+                // Foo::I32.fooerize 96
+                let (fooerize = f2) = Foo::I32;
+                f2 96
+            };
+        """.trimIndent())
+    }
 }

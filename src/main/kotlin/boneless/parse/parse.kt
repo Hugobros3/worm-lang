@@ -186,7 +186,7 @@ class Parser(private val inputAsText: String, private val tokens: List<Tokenizer
                 expect("::")
                 val args = expectSpecializationArgs()
                 expect("=")
-                val body = Def.DefBody.Instance(ctIdentifier, args, expectExpression(0))
+                val body = Def.DefBody.Instance(BindPoint.new(ctIdentifier), args, expectExpression(0))
                 // instances don't get referred to by name
                 defs += Def("__impl_${ctIdentifier}_$args", body, typeParams)
                 expect(";")

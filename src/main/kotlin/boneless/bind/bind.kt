@@ -58,7 +58,8 @@ class BindHelper(private val module: Module) {
                 TermLocation.BuiltinRef(builtin_fn)
         }
         for (def in module.defs) {
-            this[def.identifier] = TermLocation.DefRef(def)
+            if (def.body !is Def.DefBody.Instance)
+                this[def.identifier] = TermLocation.DefRef(def)
         }
     }
 
@@ -73,6 +74,12 @@ class BindHelper(private val module: Module) {
             is Def.DefBody.DataCtor -> bind(def.body.datatype)
             is Def.DefBody.TypeAlias -> bind(def.body.aliasedType)
             is Def.DefBody.FnBody -> bind(def.body.fn)
+            is Def.DefBody.Contract -> bind(def.body.payload)
+            is Def.DefBody.Instance -> {
+                def.body.contractId.resolved_ = this[def.body.contractId.identifier]
+                def.body.typeArgs.forEach(::bind)
+                bind(def.body.body)
+            }
             else -> throw Exception("Unhandled ast node ${def.body}")
         }
         pop()
