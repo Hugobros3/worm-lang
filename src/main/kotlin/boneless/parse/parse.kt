@@ -458,6 +458,10 @@ class Parser(private val inputAsText: String, private val tokens: List<Tokenizer
                         continue@outerBinop
                     } else if (accept(infix.token.str)) {
                         when (infix) {
+                            InfixOperator.Projection -> {
+                                val id = expectIdentifier()
+                                accumulator = Expression.Projection(accumulator, id)
+                            }
                             InfixOperator.Ascription -> {
                                 val type = expectType()
                                 accumulator = Expression.Ascription(accumulator, type)

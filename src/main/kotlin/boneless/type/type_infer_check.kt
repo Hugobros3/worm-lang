@@ -148,6 +148,10 @@ class TypeChecker(val module: Module) {
                     is TermLocation.TypeParamRef -> Type.TypeParam(r)
                 }
             }
+            is Expression.Projection -> {
+                val inside = infer(expr.expression)
+                inferProjection(inside, expr.id)
+            }
             is Expression.ExprSpecialization -> {
                 infer (expr.target)
                 val def = (expr.target.id.resolved as? TermLocation.DefRef)?.def ?: throw Exception("Can only specialize defs")
@@ -227,6 +231,7 @@ class TypeChecker(val module: Module) {
                 )
                 expected_type
             }
+            is Expression.Projection -> TODO()
             is Expression.ExprSpecialization -> {
                 val t = inferExpr(expr)
                 expect(t, expected_type)
@@ -506,6 +511,19 @@ class TypeChecker(val module: Module) {
                 coInferPtrnExpr(inst.pattern, inst.body)
             }
             is Instruction.Evaluate -> infer(inst.expr)
+        }
+    }
+
+    fun inferProjection(type: Type, id: String): Type {
+        return when (type) {
+            is Type.RecordType -> {
+                val field = type.elements.find { it.first == id }
+                field?.second ?: throw Exception("No field $id in ${type.prettyPrint()}")
+            }
+            is Type.EnumType -> TODO()
+            is Type.NominalType -> inferProjection(type.dataType, id)
+            is Type.TypeParam -> throw Exception("Can't project on type parameters")
+            else -> throw Exception("Can't project on ${type.javaClass.simpleName}")
         }
     }
 }

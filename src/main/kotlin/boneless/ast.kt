@@ -63,6 +63,8 @@ sealed class Expression : Typeable by typeable() {
     data class ListExpression(val elements: List<Expression>, val is_synthesized_invocation_argument_list: Boolean = false) : Expression()
     data class RecordExpression(val fields: List<Pair<Identifier, Expression>>) : Expression()
 
+    data class Projection(val expression: Expression, val id: /** not a bind point because only the type checker can figure it out */Identifier) : Expression()
+
     data class Invocation(val callee: Expression, val arg: Expression) : Expression()
     data class Function(val param: Pattern, val body: Expression, val returnTypeAnnotation: TypeExpr? = null) : Expression()
 

@@ -45,6 +45,7 @@ enum class Keyword(val str: String) {
     StatementEnd(";"),
     NextItem(","),
     TypeAnnotation(":"),
+    Projection("."),
 
     Plus("+"),
     Minus("-"),

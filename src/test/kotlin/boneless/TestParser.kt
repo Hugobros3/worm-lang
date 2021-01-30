@@ -214,4 +214,14 @@ class TestParser {
             );
         """.trimIndent())
     }
+
+    @Test
+    fun testProjection() {
+        testModule("""
+            forall T1, T2
+            data Pair = [first = T1, second = T2];
+            
+            fn sum_pair(p: Pair::(I32, I32)) => p.first + p.second;
+        """.trimIndent())
+    }
 }

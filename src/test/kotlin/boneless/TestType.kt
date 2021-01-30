@@ -160,10 +160,23 @@ class TestType {
             );
             
             fn f() => {
-                // Foo::I32.fooerize 96
                 let (fooerize = f2) = Foo::I32;
                 f2 96
             };
+            
+            fn g() => {
+                Foo::I32.fooerize 96
+            };
+        """.trimIndent())
+    }
+
+    @Test
+    fun testProjection() {
+        testType("""
+            forall T1, T2
+            data Pair = [first = T1, second = T2];
+            
+            fn sum_pair(p: Pair::(I32, I32)) => p.first + p.second;
         """.trimIndent())
     }
 }

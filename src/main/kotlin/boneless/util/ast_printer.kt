@@ -77,6 +77,7 @@ private class PrettyPrinter(val resugarizePrefixAndInfixSymbols: Boolean = true,
             is Expression.QuoteLiteral -> literal.print(firstOperand)
             is Expression.QuoteType -> "[" + quotedType.print() + "]"
             is Expression.IdentifierRef -> id.identifier
+            is Expression.Projection -> expression.print(0) + "." + id
             is Expression.ExprSpecialization -> target.print() + "::" + if (arguments.size == 1) arguments[0].print() else ( "(" + arguments.joinToString(", ") { it.prettyPrint() } + ")" )
             is Expression.Invocation -> {
                 val callee = callee

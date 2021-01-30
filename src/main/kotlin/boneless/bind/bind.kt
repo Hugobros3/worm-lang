@@ -19,6 +19,10 @@ sealed class TermLocation {
         override fun toString(): String {
             return def.typeParams[index]
         }
+
+        override fun hashCode(): Int {
+            return def.identifier.hashCode() xor index
+        }
     }
 }
 
@@ -137,6 +141,9 @@ class BindHelper(private val module: Module) {
             is Expression.ExprSpecialization -> {
                 bind(expr.target)
                 expr.arguments.forEach(::bind)
+            }
+            is Expression.Projection -> {
+                bind(expr.expression)
             }
             else -> throw Exception("Unhandled ast node $expr")
         }

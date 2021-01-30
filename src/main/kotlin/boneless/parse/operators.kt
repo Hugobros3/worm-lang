@@ -26,5 +26,6 @@ enum class InfixOperator(val token: Keyword, val priority: Int, val rewrite: Str
     And(Keyword.And, 80, "and"),
     Or(Keyword.Or, 40, "or"),
 
+    Projection(Keyword.Projection, 100, null),
     Application(Keyword.None, 100, null),
 }
