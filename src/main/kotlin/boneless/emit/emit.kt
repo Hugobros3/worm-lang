@@ -2,26 +2,35 @@ package boneless.emit
 
 import boneless.*
 import boneless.bind.TermLocation
+import boneless.bind.get_def
 import boneless.classfile.*
+import boneless.core.BuiltinFn
+import boneless.core.prelude_modules
 import boneless.type.PrimitiveTypeEnum
 import boneless.type.Type
 import boneless.type.unit_type
+import boneless.util.prettyPrint
 import java.io.File
 
 typealias PutOnStack = () -> Unit
 class Emitter(val modules: List<Module>, val outputDir: File) {
     val mod_classes = mutableMapOf<Module, ClassFile>()
     val type_classes = mutableMapOf<Type, ClassFile>()
+    val instance_classes = mutableMapOf<Def, ClassFile>()
 
     fun emit() {
         for (module in modules)
-            mod_classes[module] = emit(module)
+            mod_classes[module] = emit_module(module)
 
         for (cf in mod_classes.values) {
             val outputFile = File("${outputDir.absoluteFile}/${cf.name}.class")
             writeClassFile(cf, outputFile)
         }
         for (cf in type_classes.values) {
+            val outputFile = File("${outputDir.absoluteFile}/${cf.name}.class")
+            writeClassFile(cf, outputFile)
+        }
+        for (cf in instance_classes.values) {
             val outputFile = File("${outputDir.absoluteFile}/${cf.name}.class")
             writeClassFile(cf, outputFile)
         }
@@ -34,7 +43,7 @@ class Emitter(val modules: List<Module>, val outputDir: File) {
                 PrimitiveTypeEnum.Bool -> TODO()
                 PrimitiveTypeEnum.I32 -> FieldDescriptor.BaseType.I
                 PrimitiveTypeEnum.I64 -> TODO()
-                PrimitiveTypeEnum.F32 -> TODO()
+                PrimitiveTypeEnum.F32 -> FieldDescriptor.BaseType.F
             }
             is Type.RecordType -> TODO()
             is Type.TupleType -> if (type.isUnit) null else FieldDescriptor.ReferenceType.NullFreeClassType(mangled_datatype_name(type))
@@ -59,10 +68,12 @@ class Emitter(val modules: List<Module>, val outputDir: File) {
         is Type.TupleType -> "TupleType__" + type.elements.joinToString("") { t -> "${mangled_datatype_name(t)}__" }
         is Type.ArrayType -> TODO()
         is Type.EnumType -> TODO()
-        is Type.NominalType -> "BL_${type.name}"
+        is Type.NominalType -> "BL_NT_${type.name}"
         is Type.FnType -> throw Exception("Not a data type")
         is Type.Top -> TODO("java/lang/object")
     }
+
+    fun mangled_contract_instance_name(contractName: String, argumentsExpr: List<Type>): String = "BL_INST_$contractName$"+argumentsExpr.joinToString("_") { mangled_datatype_name(it) }
 
     fun tuple_type_init_descriptor(tupleType: Type.TupleType) = MethodDescriptor(tupleType.elements.mapNotNull { getFieldDescriptor(it) }, ReturnDescriptor.NonVoidDescriptor(getFieldDescriptor(tupleType)!!))
 
@@ -119,7 +130,43 @@ class Emitter(val modules: List<Module>, val outputDir: File) {
         }
     }
 
-    fun emit(module: Module): ClassFile {
+    fun emit_instance_classfile(def: Def) {
+        assert(def.body is Def.DefBody.Instance)
+        val contract = get_def((def.body as Def.DefBody.Instance).contractId.resolved)!!
+        instance_classes.getOrPut(def) {
+            val builder = ClassFileBuilder(className = mangled_contract_instance_name(contract.identifier, def.body.arguments), accessFlags = defaultClassAccessFlags)
+            // TODO hacky garbage: this assumes the body is a recordexpr
+            // TODO do this the proper way with function exprs
+            val body = def.body.body as Expression.RecordExpression
+            for ((f, d) in body.fields) {
+                // TODO more hacky garbage: this assumes all fields are Fns
+                val fnt = d.type as Type.FnType
+                val descriptor = getMethodDescriptor(fnt)
+                when (d) {
+                    is Expression.Function -> {
+                        val code = FunctionEmitter(d, builder).emit()
+                        builder.method(f, descriptor, defaulMethodAccessFlags.copy(acc_final = true, acc_static = true), code)
+                    }
+                    is Expression.IdentifierRef -> when(val r = d.id.resolved) {
+                        is TermLocation.DefRef -> TODO()
+                        is TermLocation.BinderRef -> TODO()
+                        is TermLocation.BuiltinFnRef -> {
+                            val wrapper = fn_wrapper(d)
+                            println(wrapper.prettyPrint())
+                            val code = FunctionEmitter(wrapper, builder).emit()
+                            builder.method(f, descriptor, defaulMethodAccessFlags.copy(acc_final = true, acc_static = true), code)
+                        }
+                        is TermLocation.TypeParamRef -> TODO()
+                    }
+                    else -> TODO()
+                }
+
+            }
+            builder.finish()
+        }
+    }
+
+    fun emit_module(module: Module): ClassFile {
         val builder = ClassFileBuilder(className = module.name, accessFlags = defaultClassAccessFlags)
 
         for (def in module.defs) {
@@ -128,20 +175,21 @@ class Emitter(val modules: List<Module>, val outputDir: File) {
                 is Def.DefBody.DataCtor -> TODO()
                 is Def.DefBody.FnBody -> {
                     val descriptor = getMethodDescriptor(def.type as Type.FnType)
-                    val code = FunctionEmitter(def.body, builder).emit()
+                    val code = FunctionEmitter(def.body.fn, builder).emit()
                     builder.method(def.identifier, descriptor, defaulMethodAccessFlags.copy(acc_final = true, acc_static = true), code)
                 }
                 is Def.DefBody.TypeAlias -> {
                     emit_datatype_classfile_if_needed(def.type!!)
                 }
+                is Def.DefBody.Contract -> { /** no code */ }
+                is Def.DefBody.Instance -> emit_instance_classfile(def)
             }
         }
 
         return builder.finish()
     }
 
-    inner class FunctionEmitter(val def_body: Def.DefBody.FnBody, val cfBuilder: ClassFileBuilder) {
-        val fn = def_body.fn
+    inner class FunctionEmitter(val fn: Expression.Function, val cfBuilder: ClassFileBuilder) {
         val type = fn.type!! as Type.FnType
         val builder = BytecodeBuilder(cfBuilder)
 
@@ -215,7 +263,7 @@ class Emitter(val modules: List<Module>, val outputDir: File) {
                 is Expression.IdentifierRef -> when(val r = expr.id.resolved) {
                     is TermLocation.DefRef -> TODO()
                     is TermLocation.BinderRef -> accessPtrn(r.binder)
-                    is TermLocation.BuiltinRef -> throw Exception("Not allowed / (should not be) possible")
+                    is TermLocation.BuiltinFnRef -> throw Exception("Not allowed / (should not be) possible")
                 }
                 is Expression.ListExpression -> {
                     when (val type = expr.type!!) {
@@ -234,7 +282,97 @@ class Emitter(val modules: List<Module>, val outputDir: File) {
                 }
                 is Expression.RecordExpression -> TODO()
                 is Expression.Invocation -> {
-                    emit(expr.arg)
+                    when {
+                        expr.callee is Expression.IdentifierRef -> when (val r = expr.callee.id.resolved) {
+                            is TermLocation.DefRef -> TODO()
+                            is TermLocation.BinderRef -> TODO()
+                            is TermLocation.BuiltinFnRef -> {
+                                when(r.fn) {
+                                    BuiltinFn.jvm_add_i32 -> {
+                                        val ptrn = fn.param as Pattern.ListPattern
+                                        accessPtrn(ptrn.elements[0])
+                                        accessPtrn(ptrn.elements[1])
+                                        builder.add_i32()
+                                    }
+                                    BuiltinFn.jvm_sub_i32 -> {
+                                        val ptrn = fn.param as Pattern.ListPattern
+                                        accessPtrn(ptrn.elements[0])
+                                        accessPtrn(ptrn.elements[1])
+                                        builder.sub_i32()
+                                    }
+                                    BuiltinFn.jvm_mul_i32 -> {
+                                        val ptrn = fn.param as Pattern.ListPattern
+                                        accessPtrn(ptrn.elements[0])
+                                        accessPtrn(ptrn.elements[1])
+                                        builder.mul_i32()
+                                    }
+                                    BuiltinFn.jvm_div_i32 -> {
+                                        val ptrn = fn.param as Pattern.ListPattern
+                                        accessPtrn(ptrn.elements[0])
+                                        accessPtrn(ptrn.elements[1])
+                                        builder.div_i32()
+                                    }
+                                    BuiltinFn.jvm_mod_i32 -> {
+                                        val ptrn = fn.param as Pattern.ListPattern
+                                        accessPtrn(ptrn.elements[0])
+                                        accessPtrn(ptrn.elements[1])
+                                        builder.mod_i32()
+                                    }
+                                    BuiltinFn.jvm_neg_i32 -> {
+                                        accessPtrn(fn.param)
+                                        builder.neg_i32()
+                                    }
+                                    BuiltinFn.jvm_add_f32 -> {
+                                        val ptrn = fn.param as Pattern.ListPattern
+                                        accessPtrn(ptrn.elements[0])
+                                        accessPtrn(ptrn.elements[1])
+                                        builder.add_f32()
+                                    }
+                                    BuiltinFn.jvm_sub_f32 -> {
+                                        val ptrn = fn.param as Pattern.ListPattern
+                                        accessPtrn(ptrn.elements[0])
+                                        accessPtrn(ptrn.elements[1])
+                                        builder.sub_f32()
+                                    }
+                                    BuiltinFn.jvm_mul_f32 -> {
+                                        val ptrn = fn.param as Pattern.ListPattern
+                                        accessPtrn(ptrn.elements[0])
+                                        accessPtrn(ptrn.elements[1])
+                                        builder.mul_f32()
+                                    }
+                                    BuiltinFn.jvm_div_f32 -> {
+                                        val ptrn = fn.param as Pattern.ListPattern
+                                        accessPtrn(ptrn.elements[0])
+                                        accessPtrn(ptrn.elements[1])
+                                        builder.div_f32()
+                                    }
+                                    BuiltinFn.jvm_mod_f32 -> {
+                                        val ptrn = fn.param as Pattern.ListPattern
+                                        accessPtrn(ptrn.elements[0])
+                                        accessPtrn(ptrn.elements[1])
+                                        builder.mod_f32()
+                                    }
+                                    BuiltinFn.jvm_neg_f32 -> {
+                                        accessPtrn(fn.param)
+                                        builder.neg_f32()
+                                    }
+                                }
+                                return
+                            }
+                            is TermLocation.TypeParamRef -> TODO()
+                        }
+                        expr.callee is Expression.Projection && expr.callee.expression is Expression.IdentifierRef -> when(val r = expr.callee.expression.id.resolved) {
+                            is TermLocation.DefRef -> {
+                                val def = r.def
+                                if (def.body is Def.DefBody.Contract) {
+                                    emit(expr.arg)
+                                    builder.callStatic(mangled_contract_instance_name(def.identifier, expr.callee.expression.deducedImplicitSpecializationArguments!!), expr.callee.id, getMethodDescriptor(expr.callee.type as Type.FnType))
+                                    return
+                                }
+                            }
+                        }
+                    }
+
                     TODO("perform actual call")
                 }
                 is Expression.Function -> TODO()
@@ -299,4 +437,4 @@ class Emitter(val modules: List<Module>, val outputDir: File) {
     }
 }
 
-fun emit(module: Module, outputDir: File) = Emitter(listOf(module), outputDir).emit()
+fun emit(module: Module, outputDir: File) = Emitter(listOf(module) + prelude_modules, outputDir).emit()

@@ -18,7 +18,7 @@ data class BindPoint private constructor(val identifier: Identifier) {
 sealed class TermLocation {
     data class DefRef(val def: Def) : TermLocation()
     data class BinderRef(val binder: Pattern.BinderPattern) : TermLocation()
-    data class BuiltinRef(val fn: BuiltinFn) : TermLocation()
+    data class BuiltinFnRef(val fn: BuiltinFn) : TermLocation()
     data class TypeParamRef(val def: Def, val index: Int) : TermLocation() {
         override fun toString(): String {
             return def.typeParamsNames[index]
@@ -65,7 +65,7 @@ class BindHelper(private val module: Module) {
 
         for (builtin_fn in BuiltinFn.values()) {
             this[builtin_fn.name.toLowerCase()] =
-                TermLocation.BuiltinRef(builtin_fn)
+                TermLocation.BuiltinFnRef(builtin_fn)
         }
         if (!module.name.startsWith("Prelude"))
             for (prelude_mod in prelude_modules) {

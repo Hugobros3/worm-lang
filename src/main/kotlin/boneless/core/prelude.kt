@@ -29,6 +29,13 @@ instance Mul::I32 = ( mul = jvm_mul_i32 );
 instance Div::I32 = ( div = jvm_div_i32 );
 instance Mod::I32 = ( mod = jvm_mod_i32 );
 instance Neg::I32 = ( neg = jvm_neg_i32 );
+
+instance Add::F32 = ( add = jvm_add_f32 );
+instance Sub::F32 = ( sub = jvm_sub_f32 );
+instance Mul::F32 = ( mul = jvm_mul_f32 );
+instance Div::F32 = ( div = jvm_div_f32 );
+instance Mod::F32 = ( mod = jvm_mod_f32 );
+instance Neg::F32 = ( neg = jvm_neg_f32 );
 """.trimIndent()
 
 val prelude_math_module = createModule("Prelude_Math", prelude_math).also { bind(it) ; type(it) }

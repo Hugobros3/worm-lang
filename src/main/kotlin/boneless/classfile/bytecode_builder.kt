@@ -20,7 +20,7 @@ class BytecodeBuilder(private val classFileBuilder: ClassFileBuilder) {
     }
     private fun popStack(expected: JVMComputationalType): JVMComputationalType {
         val t = stack.removeAt(stack.size - 1)
-        assert(t == expected)
+        assert(t == expected) { "Popped $t, expected $expected" }
         return t
     }
 
@@ -58,7 +58,18 @@ class BytecodeBuilder(private val classFileBuilder: ClassFileBuilder) {
                     }
                 }
             }
-            CT_Float -> TODO()
+            CT_Float -> {
+                when(i) {
+                    0 -> instruction(JVMInstruction.fload_0)
+                    1 -> instruction(JVMInstruction.fload_1)
+                    2 -> instruction(JVMInstruction.fload_2)
+                    3 -> instruction(JVMInstruction.fload_3)
+                    else -> {
+                        instruction(JVMInstruction.fload)
+                        immediate_byte(i.toByte())
+                    }
+                }
+            }
             CT_Long -> TODO()
             CT_Double -> TODO()
             CT_Reference -> {
@@ -158,7 +169,7 @@ class BytecodeBuilder(private val classFileBuilder: ClassFileBuilder) {
         popStack(type.asComputationalType)
         when(type.asComputationalType) {
             CT_Int -> instruction(JVMInstruction.ireturn)
-            CT_Float -> TODO()
+            CT_Float -> instruction(JVMInstruction.freturn)
             CT_Long -> TODO()
             CT_Double -> TODO()
             CT_Reference -> instruction(JVMInstruction.areturn)
@@ -182,6 +193,88 @@ class BytecodeBuilder(private val classFileBuilder: ClassFileBuilder) {
         if (methodDescriptor.codom is ReturnDescriptor.NonVoidDescriptor) {
             pushStack(methodDescriptor.codom.fieldType.toActualJVMType().asComputationalType)
         }
+    }
+    
+    fun add_i32() {
+        popStack(CT_Int)
+        popStack(CT_Int)
+        instruction(JVMInstruction.iadd)
+        pushStack(CT_Int)
+    }
+    
+    fun sub_i32() {
+        popStack(CT_Int)
+        popStack(CT_Int)
+        instruction(JVMInstruction.isub)
+        pushStack(CT_Int)
+    }
+    
+    fun mul_i32() {
+        popStack(CT_Int)
+        popStack(CT_Int)
+        instruction(JVMInstruction.imul)
+        pushStack(CT_Int)
+    }
+    
+    fun div_i32() {
+        popStack(CT_Int)
+        popStack(CT_Int)
+        instruction(JVMInstruction.idiv)
+        pushStack(CT_Int)
+    }
+    
+    fun mod_i32() {
+        popStack(CT_Int)
+        popStack(CT_Int)
+        instruction(JVMInstruction.irem)
+        pushStack(CT_Int)
+    }
+    
+    fun neg_i32() {
+        popStack(CT_Int)
+        instruction(JVMInstruction.ineg)
+        pushStack(CT_Int)
+    }
+
+    fun add_f32() {
+        popStack(CT_Float)
+        popStack(CT_Float)
+        instruction(JVMInstruction.iadd)
+        pushStack(CT_Float)
+    }
+
+    fun sub_f32() {
+        popStack(CT_Float)
+        popStack(CT_Float)
+        instruction(JVMInstruction.isub)
+        pushStack(CT_Float)
+    }
+
+    fun mul_f32() {
+        popStack(CT_Float)
+        popStack(CT_Float)
+        instruction(JVMInstruction.imul)
+        pushStack(CT_Float)
+    }
+
+    fun div_f32() {
+        popStack(CT_Float)
+        popStack(CT_Float)
+        instruction(JVMInstruction.idiv)
+        pushStack(CT_Float)
+    }
+
+    fun mod_f32() {
+        popStack(CT_Float)
+        popStack(CT_Float)
+        instruction(JVMInstruction.irem)
+        pushStack(CT_Float)
+    }
+
+    fun neg_f32() {
+        popStack(CT_Float)
+        instruction(JVMInstruction.ineg)
+        pushStack(CT_Float)
     }
 
     fun finish(): Attribute.Code {

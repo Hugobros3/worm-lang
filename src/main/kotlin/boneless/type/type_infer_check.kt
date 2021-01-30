@@ -165,7 +165,7 @@ class TypeChecker(val module: Module) {
                 when (val r = expr.id.resolved) {
                     is TermLocation.DefRef -> infer(r.def)
                     is TermLocation.BinderRef -> infer(r.binder)
-                    is TermLocation.BuiltinRef -> resolveTypeExpression(r.fn.typeExpr) // TODO this is garbage
+                    is TermLocation.BuiltinFnRef -> resolveTypeExpression(r.fn.typeExpr) // TODO this is garbage
                     is TermLocation.TypeParamRef -> Type.TypeParam(r)
                 }
             }
@@ -182,20 +182,12 @@ class TypeChecker(val module: Module) {
 
                 val typeArguments = expr.arguments.map { resolveTypeExpression(it) }
 
-                if (def.body is Def.DefBody.Contract)
-                    findInstance(module, def, typeArguments)
+                if (def.body is Def.DefBody.Contract) findInstance(module, def, typeArguments)
                         ?: throw Exception("No instance for contract ${def.identifier} with type arguments ${typeArguments.map { it.prettyPrint() }}")
 
                 val genericType = infer(def)
                 val substitutions = def.typeParamsNames.mapIndexed { i, _ ->
-                    Pair(
-                        Type.TypeParam(
-                            TermLocation.TypeParamRef(
-                                def,
-                                i
-                            )
-                        ) as Type, typeArguments[i]
-                    )
+                    Pair(Type.TypeParam(TermLocation.TypeParamRef(def, i)) as Type, typeArguments[i])
                 }.toMap()
                 specializeType(genericType, substitutions)
             }
@@ -278,14 +270,17 @@ class TypeChecker(val module: Module) {
                             if (def.typeParamsNames.isNotEmpty()) {
                                 val substitutions = unify(t, expected_type)
                                 val st = specializeType(t, substitutions)
-                                expr.deducedImplicitSpecializationArguments = def.typeParams.map { substitutions[it]!! }
+                                val typeArguments = def.typeParams.map { substitutions[it]!! }
+                                expr.deducedImplicitSpecializationArguments = typeArguments
+                                if (def.body is Def.DefBody.Contract)
+                                    findInstance(module, def, typeArguments) ?: throw Exception("No instance for contract ${def.identifier} with type arguments ${typeArguments.map { it.prettyPrint() }}")
                                 coerce(expr, st, expected_type)
                                 return st
                             }
                             t
                         }
                         is TermLocation.BinderRef -> infer(r.binder)
-                        is TermLocation.BuiltinRef -> {
+                        is TermLocation.BuiltinFnRef -> {
                             resolveTypeExpression(r.fn.typeExpr)
                         }
                         is TermLocation.TypeParamRef -> Type.TypeParam(r)
@@ -301,8 +296,12 @@ class TypeChecker(val module: Module) {
                     if (def != null && def.typeParamsNames.isNotEmpty()) {
                         val substitutions = unify(t, expected_type)
                         val st = specializeType(t, substitutions)
-                        expr.expression.deducedImplicitSpecializationArguments =
-                            def.typeParams.map { substitutions[it]!! }
+                        val typeArguments = def.typeParams.map { substitutions[it]!! }
+                        expr.expression.deducedImplicitSpecializationArguments = typeArguments
+
+                        if (def.body is Def.DefBody.Contract)
+                            findInstance(module, def, typeArguments) ?: throw Exception("No instance for contract ${def.identifier} with type arguments ${typeArguments.map { it.prettyPrint() }}")
+
                         coerce(expr.expression, st, expected_type)
                         return st
                     }
@@ -549,7 +548,7 @@ class TypeChecker(val module: Module) {
         return when (boundIdentifier) {
             is TermLocation.DefRef -> if (boundIdentifier.def.is_type) null else infer(boundIdentifier.def)
             is TermLocation.BinderRef -> infer(boundIdentifier.binder)
-            is TermLocation.BuiltinRef -> resolveTypeExpression(boundIdentifier.fn.typeExpr)
+            is TermLocation.BuiltinFnRef -> resolveTypeExpression(boundIdentifier.fn.typeExpr)
             is TermLocation.TypeParamRef -> Type.TypeParam(boundIdentifier)
         }
     }

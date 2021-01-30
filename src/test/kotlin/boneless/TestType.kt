@@ -16,7 +16,7 @@ class TestType {
         bind(module)
         type(module)
 
-        val module_serialized = module.prettyPrint(printInferredTypes = true)
+        val module_serialized = module.prettyPrint(printInferredTypes = false)
         println(module_serialized)
     }
 
@@ -81,6 +81,15 @@ class TestType {
             data Pos = [I32, I32];
             data Rect = [min = Pos, max = Pos];
             fn area Rect(min = Pos (sx, sy), max = Pos (ex, ey)) -> I32 = (ex - sx) * (ey - sy);
+        """.trimIndent())
+    }
+
+    @Test
+    fun testFloats() {
+        testType("""
+            fn f(f1: F32) => {
+                3.0 * f1
+            };
         """.trimIndent())
     }
 
@@ -245,6 +254,17 @@ class TestType {
             fn f() => {
                 Foo.fooerize 96
             };
+        """.trimIndent())
+    }
+
+    @Test
+    fun testVector() {
+        testType("""
+            forall T
+            data Vec3 = [x = F32, y = F32, z = F32];
+            
+            fn dot(a: Vec3::F32, b: Vec3::F32) => a.x * b.x + a.y * b.y + a.z * b.z;
+            fn dot2(a: Vec3::F32, b: Vec3::F32) -> F32 = dot(a, b);
         """.trimIndent())
     }
 }

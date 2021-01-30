@@ -105,4 +105,16 @@ class TestJVMCodegen {
         val outputDir = File("test_out/")
         emit(mod, outputDir)
     }
+
+    @Test
+    fun testAddition() {
+        val mod = module("TestAddition","""
+            fn f(a: I32, b: I32) => {
+                a + b
+            };
+        """.trimIndent())
+
+        val outputDir = File("test_out/")
+        emit(mod, outputDir)
+    }
 }
