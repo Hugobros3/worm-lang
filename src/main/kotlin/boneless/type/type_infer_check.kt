@@ -165,7 +165,7 @@ class TypeChecker(val module: Module) {
                 when (val r = expr.id.resolved) {
                     is TermLocation.DefRef -> infer(r.def)
                     is TermLocation.BinderRef -> infer(r.binder)
-                    is TermLocation.BuiltinFnRef -> resolveTypeExpression(r.fn.typeExpr) // TODO this is garbage
+                    is TermLocation.BuiltinFnRef -> r.fn.type
                     is TermLocation.TypeParamRef -> Type.TypeParam(r)
                 }
             }
@@ -280,9 +280,7 @@ class TypeChecker(val module: Module) {
                             t
                         }
                         is TermLocation.BinderRef -> infer(r.binder)
-                        is TermLocation.BuiltinFnRef -> {
-                            resolveTypeExpression(r.fn.typeExpr)
-                        }
+                        is TermLocation.BuiltinFnRef -> r.fn.type
                         is TermLocation.TypeParamRef -> Type.TypeParam(r)
                     }, expected_type
                 )
@@ -548,7 +546,7 @@ class TypeChecker(val module: Module) {
         return when (boundIdentifier) {
             is TermLocation.DefRef -> if (boundIdentifier.def.is_type) null else infer(boundIdentifier.def)
             is TermLocation.BinderRef -> infer(boundIdentifier.binder)
-            is TermLocation.BuiltinFnRef -> resolveTypeExpression(boundIdentifier.fn.typeExpr)
+            is TermLocation.BuiltinFnRef -> boundIdentifier.fn.type
             is TermLocation.TypeParamRef -> Type.TypeParam(boundIdentifier)
         }
     }

@@ -6,7 +6,7 @@ import boneless.bind.BindPoint
 enum class PrefixOperator(val token: Keyword, val rewrite_: String) {
     Negate(Keyword.Minus, "Neg.neg"),
 
-    Not(Keyword.Not, "not"),
+    Not(Keyword.Not, "Not.not"),
     Reference(Keyword.Reference, "ref"),
     Dereference(Keyword.Dereference, "deref"),
     ;
@@ -31,12 +31,19 @@ enum class InfixOperator(val token: Keyword, val priority: Int, val rewrite_: St
     Divide(Keyword.Divide, 60, "Div.div"),
     Modulo(Keyword.Modulo, 60, "Mod.mod"),
 
-    InfEq(Keyword.InfEq, 20, "infeq"),
-    Inf(Keyword.Inf, 20, "inf"),
-    Eq(Keyword.Eq, 20, "eq"),
+    InfEq(Keyword.InfEq, 20, "InfEq.infeq"),
+    Inf(Keyword.Inf, 20, "Inf.inf"),
+    Eq(Keyword.Eq, 20, "Eq.eq"),
+    Neq(Keyword.NotEq, 20, "Neq.neq"),
+    Grter(Keyword.Greater, 20, "Grt.gt"),
+    GrtEq(Keyword.GreaterEq, 20, "GrtEq.grteq"),
 
-    And(Keyword.And, 80, "and"),
-    Or(Keyword.Or, 40, "or"),
+    And(Keyword.And, 80, "And.and"),
+    Or(Keyword.Or, 40, "Or.or"),
+    Xor(Keyword.Xor, 40, "Xor.xor"),
+
+    ConditionalAnd(Keyword.Cand, 80, null),
+    ConditionalOr(Keyword.Cor, 40, null),
 
     Projection(Keyword.Projection, 100, null),
     Application(Keyword.None, 100, null),

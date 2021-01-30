@@ -239,42 +239,63 @@ class BytecodeBuilder(private val classFileBuilder: ClassFileBuilder) {
     fun add_f32() {
         popStack(CT_Float)
         popStack(CT_Float)
-        instruction(JVMInstruction.iadd)
+        instruction(JVMInstruction.fadd)
         pushStack(CT_Float)
     }
 
     fun sub_f32() {
         popStack(CT_Float)
         popStack(CT_Float)
-        instruction(JVMInstruction.isub)
+        instruction(JVMInstruction.fsub)
         pushStack(CT_Float)
     }
 
     fun mul_f32() {
         popStack(CT_Float)
         popStack(CT_Float)
-        instruction(JVMInstruction.imul)
+        instruction(JVMInstruction.fmul)
         pushStack(CT_Float)
     }
 
     fun div_f32() {
         popStack(CT_Float)
         popStack(CT_Float)
-        instruction(JVMInstruction.idiv)
+        instruction(JVMInstruction.fdiv)
         pushStack(CT_Float)
     }
 
     fun mod_f32() {
         popStack(CT_Float)
         popStack(CT_Float)
-        instruction(JVMInstruction.irem)
+        instruction(JVMInstruction.frem)
         pushStack(CT_Float)
     }
 
     fun neg_f32() {
         popStack(CT_Float)
-        instruction(JVMInstruction.ineg)
+        instruction(JVMInstruction.fneg)
         pushStack(CT_Float)
+    }
+
+    fun and_i32() {
+        popStack(CT_Int)
+        popStack(CT_Int)
+        instruction(JVMInstruction.iand)
+        pushStack(CT_Int)
+    }
+
+    fun or_i32() {
+        popStack(CT_Int)
+        popStack(CT_Int)
+        instruction(JVMInstruction.ior)
+        pushStack(CT_Int)
+    }
+
+    fun xor_i32() {
+        popStack(CT_Int)
+        popStack(CT_Int)
+        instruction(JVMInstruction.ixor)
+        pushStack(CT_Int)
     }
 
     fun finish(): Attribute.Code {

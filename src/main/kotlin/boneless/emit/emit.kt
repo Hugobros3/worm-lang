@@ -12,7 +12,6 @@ import boneless.type.unit_type
 import boneless.util.prettyPrint
 import java.io.File
 
-typealias PutOnStack = () -> Unit
 class Emitter(val modules: List<Module>, val outputDir: File) {
     val mod_classes = mutableMapOf<Module, ClassFile>()
     val type_classes = mutableMapOf<Type, ClassFile>()
@@ -21,6 +20,10 @@ class Emitter(val modules: List<Module>, val outputDir: File) {
     fun emit() {
         for (module in modules)
             mod_classes[module] = emit_module(module)
+
+        val builtin_cf = emit_builtin_fn_classfile()
+        val builtin_outputFile = File("${outputDir.absoluteFile}/BuiltinFns.class")
+        writeClassFile(builtin_cf, builtin_outputFile)
 
         for (cf in mod_classes.values) {
             val outputFile = File("${outputDir.absoluteFile}/${cf.name}.class")
@@ -40,9 +43,9 @@ class Emitter(val modules: List<Module>, val outputDir: File) {
         return when(type) {
             is Type.TypeParam -> throw Exception("Type params should be monomorphized !")
             is Type.PrimitiveType -> when(type.primitiveType) {
-                PrimitiveTypeEnum.Bool -> TODO()
+                PrimitiveTypeEnum.Bool -> FieldDescriptor.BaseType.Z
                 PrimitiveTypeEnum.I32 -> FieldDescriptor.BaseType.I
-                PrimitiveTypeEnum.I64 -> TODO()
+                PrimitiveTypeEnum.I64 -> FieldDescriptor.BaseType.J
                 PrimitiveTypeEnum.F32 -> FieldDescriptor.BaseType.F
             }
             is Type.RecordType -> TODO()
@@ -206,39 +209,12 @@ class Emitter(val modules: List<Module>, val outputDir: File) {
                 registerPattern(m, fn.param, procedure)
                 patternsAccess += m
             }
-            println(patternsAccess)
-        }
-
-        fun registerPattern(map: MutableMap<Pattern, PutOnStack>, pattern: Pattern, procedure: PutOnStack) {
-            map[pattern] = procedure
-            when (pattern) {
-                is Pattern.BinderPattern -> {} // that's it
-                is Pattern.LiteralPattern -> TODO()
-                is Pattern.ListPattern -> {
-                    when (val type = pattern.type!!) {
-                        is Type.TupleType -> {
-                            for ((i, subpattern) in pattern.elements.withIndex()) {
-                                if (subpattern.type!! == unit_type())
-                                    continue
-                                val extract_element_procedure: PutOnStack = {
-                                    procedure()
-                                    builder.getField(mangled_datatype_name(type), "_$i", getFieldDescriptor(subpattern.type!!)!!)
-                                }
-                                registerPattern(map, subpattern, extract_element_procedure)
-                            }
-                        }
-                        else -> throw Exception("Can't emit a list pattern as a $type")
-                    }
-                }
-                is Pattern.RecordPattern -> TODO()
-                is Pattern.CtorPattern -> TODO()
-                is Pattern.TypeAnnotatedPattern -> registerPattern(map, pattern.pattern, procedure)
-            }
+            // println(patternsAccess)
         }
 
         fun accessPtrn(pattern: Pattern) {
             for (frame in patternsAccess) {
-                (frame[pattern] ?: continue).invoke()
+                (frame[pattern] ?: continue).invoke(builder)
                 return
             }
             throw Exception("$pattern is not accessible")
@@ -287,76 +263,8 @@ class Emitter(val modules: List<Module>, val outputDir: File) {
                             is TermLocation.DefRef -> TODO()
                             is TermLocation.BinderRef -> TODO()
                             is TermLocation.BuiltinFnRef -> {
-                                when(r.fn) {
-                                    BuiltinFn.jvm_add_i32 -> {
-                                        val ptrn = fn.param as Pattern.ListPattern
-                                        accessPtrn(ptrn.elements[0])
-                                        accessPtrn(ptrn.elements[1])
-                                        builder.add_i32()
-                                    }
-                                    BuiltinFn.jvm_sub_i32 -> {
-                                        val ptrn = fn.param as Pattern.ListPattern
-                                        accessPtrn(ptrn.elements[0])
-                                        accessPtrn(ptrn.elements[1])
-                                        builder.sub_i32()
-                                    }
-                                    BuiltinFn.jvm_mul_i32 -> {
-                                        val ptrn = fn.param as Pattern.ListPattern
-                                        accessPtrn(ptrn.elements[0])
-                                        accessPtrn(ptrn.elements[1])
-                                        builder.mul_i32()
-                                    }
-                                    BuiltinFn.jvm_div_i32 -> {
-                                        val ptrn = fn.param as Pattern.ListPattern
-                                        accessPtrn(ptrn.elements[0])
-                                        accessPtrn(ptrn.elements[1])
-                                        builder.div_i32()
-                                    }
-                                    BuiltinFn.jvm_mod_i32 -> {
-                                        val ptrn = fn.param as Pattern.ListPattern
-                                        accessPtrn(ptrn.elements[0])
-                                        accessPtrn(ptrn.elements[1])
-                                        builder.mod_i32()
-                                    }
-                                    BuiltinFn.jvm_neg_i32 -> {
-                                        accessPtrn(fn.param)
-                                        builder.neg_i32()
-                                    }
-                                    BuiltinFn.jvm_add_f32 -> {
-                                        val ptrn = fn.param as Pattern.ListPattern
-                                        accessPtrn(ptrn.elements[0])
-                                        accessPtrn(ptrn.elements[1])
-                                        builder.add_f32()
-                                    }
-                                    BuiltinFn.jvm_sub_f32 -> {
-                                        val ptrn = fn.param as Pattern.ListPattern
-                                        accessPtrn(ptrn.elements[0])
-                                        accessPtrn(ptrn.elements[1])
-                                        builder.sub_f32()
-                                    }
-                                    BuiltinFn.jvm_mul_f32 -> {
-                                        val ptrn = fn.param as Pattern.ListPattern
-                                        accessPtrn(ptrn.elements[0])
-                                        accessPtrn(ptrn.elements[1])
-                                        builder.mul_f32()
-                                    }
-                                    BuiltinFn.jvm_div_f32 -> {
-                                        val ptrn = fn.param as Pattern.ListPattern
-                                        accessPtrn(ptrn.elements[0])
-                                        accessPtrn(ptrn.elements[1])
-                                        builder.div_f32()
-                                    }
-                                    BuiltinFn.jvm_mod_f32 -> {
-                                        val ptrn = fn.param as Pattern.ListPattern
-                                        accessPtrn(ptrn.elements[0])
-                                        accessPtrn(ptrn.elements[1])
-                                        builder.mod_f32()
-                                    }
-                                    BuiltinFn.jvm_neg_f32 -> {
-                                        accessPtrn(fn.param)
-                                        builder.neg_f32()
-                                    }
-                                }
+                                emit(expr.arg)
+                                builder.callStatic("BuiltinFns", r.fn.name, getMethodDescriptor(r.fn.type))
                                 return
                             }
                             is TermLocation.TypeParamRef -> TODO()

@@ -61,7 +61,7 @@ class TestType {
     @Test
     fun testBuiltins() {
         for (builtin in BuiltinFn.values()) {
-            println(builtin.typeExpr)
+            println(builtin.type)
         }
 
         testType("""

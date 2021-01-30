@@ -31,6 +31,9 @@ enum class Keyword(val str: String) {
     Do("do"),
     For("for"),
 
+    True("true"),
+    False("false"),
+
     Range(".."),
     Map("=>"),
     Arrow("->"),
@@ -53,9 +56,13 @@ enum class Keyword(val str: String) {
     Divide("/"),
     Modulo("%"),
 
+    Cand("&&"),
+    Cor("||"),
+
     Not("!"),
-    And("^"),
+    And("&"),
     Or("|"),
+    Xor("^"),
 
     Reference("&"),
     Dereference("@"),

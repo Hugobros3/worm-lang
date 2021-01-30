@@ -117,4 +117,30 @@ class TestJVMCodegen {
         val outputDir = File("test_out/")
         emit(mod, outputDir)
     }
+
+    @Test
+    fun testBool() {
+        val mod = module("TestBool","""
+            fn f(a: Bool, b: Bool) => {
+                let c2 = a & b;
+                let c3 = a | b;
+                let c1 = a ^ b;
+            };
+        """.trimIndent())
+
+        val outputDir = File("test_out/")
+        emit(mod, outputDir)
+    }
+
+    /*@Test
+    fun testFactorial() {
+        val mod = module("TestAddition","""
+            fn fac(n: I32) => {
+                if
+            };
+        """.trimIndent())
+
+        val outputDir = File("test_out/")
+        emit(mod, outputDir)
+    }*/
 }
