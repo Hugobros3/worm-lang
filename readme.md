@@ -6,7 +6,7 @@ the name is an unfunny private joke and literally nothing about it is set is sto
 
 ## Cool shizz:
 
- * The syntax discriminates clearly and consistently between aggregates `()`, scopes `{}`, and types `[]`. There are no exceptions, all the syntax adheres to these basic rules.
+ * The syntax discriminates clearly and consistently between scopes `{}`, value aggregates `()`, and aggregate types `[]`. There are no exceptions, all the syntax adheres to these basic rules.
  * Supports tuple, records and enumerations with a coherent and unified syntax
  * All datatypes are structural until you make them nominal using `data`
  * Local type inference inside definitions and for return types

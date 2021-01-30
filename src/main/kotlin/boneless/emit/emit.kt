@@ -35,7 +35,6 @@ class Emitter(val modules: List<Module>, val outputDir: File) {
                 PrimitiveTypeEnum.I64 -> TODO()
                 PrimitiveTypeEnum.F32 -> TODO()
             }
-            is Type.TypeApplication -> TODO()
             is Type.RecordType -> TODO()
             is Type.TupleType -> if (type.isUnit) null else FieldDescriptor.ReferenceType.NullFreeClassType(mangled_datatype_name(type))
             is Type.ArrayType -> TODO()
@@ -53,7 +52,6 @@ class Emitter(val modules: List<Module>, val outputDir: File) {
 
     fun mangled_datatype_name(type: Type): String = when(type) {
         is Type.PrimitiveType -> "Primitive${type.primitiveType.name}"
-        is Type.TypeApplication -> throw Exception("TypeApp not supported")
         is Type.RecordType -> "RecordType__" + type.elements.joinToString("") { (f, t) -> "${f}_${mangled_datatype_name(t)}__" }
         is Type.TupleType -> "TupleType__" + type.elements.joinToString("") { t -> "${mangled_datatype_name(t)}__" }
         is Type.ArrayType -> TODO()
@@ -67,7 +65,6 @@ class Emitter(val modules: List<Module>, val outputDir: File) {
     fun emit_datatype_classfile_if_needed(type: Type) {
         when (type) {
             is Type.PrimitiveType -> {}
-            is Type.TypeApplication -> throw Exception("TypeApp not supported")
             is Type.RecordType -> TODO()
             is Type.TupleType -> {
                 // Unit type does not get a class
@@ -131,7 +128,7 @@ class Emitter(val modules: List<Module>, val outputDir: File) {
                     builder.method(def.identifier, descriptor, defaulMethodAccessFlags.copy(acc_final = true, acc_static = true), code)
                 }
                 is Def.DefBody.TypeAlias -> {
-                    emit_datatype_classfile_if_needed(def.body.aliasedType)
+                    emit_datatype_classfile_if_needed(def.type!!)
                 }
             }
         }

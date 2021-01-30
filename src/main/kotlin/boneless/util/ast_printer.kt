@@ -20,6 +20,11 @@ fun Type.prettyPrint(): String {
     return PrettyPrinter().run { t.print() }
 }
 
+fun TypeExpr.prettyPrint(): String {
+    val t = this
+    return PrettyPrinter().run { t.print() }
+}
+
 private class PrettyPrinter(val resugarizePrefixAndInfixSymbols: Boolean = true, val printInferredTypes: Boolean = false) {
     fun Module.print() = defs.joinToString("\n") { it.print() }
     fun Def.print() = when(body) {
@@ -39,7 +44,7 @@ private class PrettyPrinter(val resugarizePrefixAndInfixSymbols: Boolean = true,
         is Instruction.Evaluate -> expr.prettyPrint() + ";"
     }
 
-    private fun Type?.printTypeAnnotation(): String = this?.let { ": " + it.print() } ?: ""
+    private fun TypeExpr?.printTypeAnnotation(): String = this?.let { ": " + it.print() } ?: ""
 
     fun Literal.print(firstOperand: Boolean = true): String = when (this) {
         is Literal.NumLiteral -> if (number.startsWith("-") && !firstOperand) "($number)" else number
@@ -48,13 +53,13 @@ private class PrettyPrinter(val resugarizePrefixAndInfixSymbols: Boolean = true,
         is Literal.RecordLiteral -> "(" + fields.joinToString(", ") { (id, e) -> "$id = $e" } + ")"
     }
 
-    fun Expression?.print(infixOpPriority: Int = -1, firstOperand: Boolean = true): String {
+    fun Expression.print(infixOpPriority: Int = -1, firstOperand: Boolean = true): String {
         return if (printInferredTypes) {
-            "(${this.print_(infixOpPriority, firstOperand)} /* ${this?.type.printTypeAnnotation()} */)"
+            "(${this.print_(infixOpPriority, firstOperand)} /* ${this.type!!.print()} */)"
         } else this.print_(infixOpPriority, firstOperand)
     }
 
-    fun Expression?.print_(infixOpPriority: Int = -1, firstOperand: Boolean = true): String {
+    fun Expression.print_(infixOpPriority: Int = -1, firstOperand: Boolean = true): String {
         var p = 0
         fun open() = if (p <= infixOpPriority) "(" else ""
         fun close() = if (p <= infixOpPriority) ")" else ""
@@ -103,10 +108,24 @@ private class PrettyPrinter(val resugarizePrefixAndInfixSymbols: Boolean = true,
         }
     }
 
+    fun TypeExpr.print(): String = when {
+        this is TypeExpr.PrimitiveType -> primitiveType.name
+        this is TypeExpr.TypeNameRef -> callee.identifier
+
+        this is TypeExpr.TupleType && elements.isEmpty() -> "[]"
+        this is TypeExpr.TupleType && elements.isNotEmpty() -> "[" + elements.joinToString(", ") { e -> e.print() } + "]"
+
+        this is TypeExpr.RecordType -> "[" + elements.joinToString(", ") { (name, type) -> name + "=" + type.print() } + "]"
+
+        this is TypeExpr.ArrayType -> "[" + elementType.print() + (if (size == -1) ".." else "..$size") + "]"
+
+        this is TypeExpr.EnumType -> "[" + elements.joinToString(" | ") { (name, type) -> name + "=" + type.print() } + "]"
+        this is TypeExpr.FnType -> dom.print() + " -> " + codom.print()
+        else -> throw Exception("Unprintable type")
+    }
+
     fun Type.print(): String = when {
         this is Type.PrimitiveType -> primitiveType.name
-        this is Type.TypeApplication -> callee.identifier + (if (args.isEmpty()) "" else " " + args.joinToString(" ") { it.print(0) })
-
         this is Type.TupleType && elements.isEmpty() -> "[]"
         this is Type.TupleType && elements.isNotEmpty() -> "[" + elements.joinToString(", ") { e -> e.print() } + "]"
 
@@ -122,7 +141,7 @@ private class PrettyPrinter(val resugarizePrefixAndInfixSymbols: Boolean = true,
 
     fun Pattern.print(firstOperand: Boolean = true): String {
         return if (printInferredTypes) {
-            "(${this.print_(firstOperand)} /* ${this.type.printTypeAnnotation()} */)"
+            "(${this.print_(firstOperand)} /* ${this.type!!.print()} */)"
         } else this.print_(firstOperand)
     }
     fun Pattern.print_(firstOperand: Boolean = true): String {

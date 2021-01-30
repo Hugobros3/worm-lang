@@ -109,10 +109,6 @@ class TestParser {
                     let z = !!(x ^ c ^ d ^ y);
                 };
             """.trimIndent())
-
-        testModule("""
-                fn deref_s_ptr s: ref [I32, I32] => @s;
-            """.trimIndent())
     }
 
     @Test
@@ -192,4 +188,15 @@ class TestParser {
             """.trimIndent())
         }
     }
+
+    /*@Test
+    fun testTypeParams() {
+        testModule("""
+
+        """.trimIndent())
+
+        testModule("""
+                fn deref_s_ptr s: ref :: [I32, I32] => @s;
+            """.trimIndent())
+    }*/
 }

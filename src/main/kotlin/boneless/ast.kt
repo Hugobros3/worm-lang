@@ -1,6 +1,8 @@
 package boneless
 
 import boneless.bind.BindPoint
+import boneless.core.BuiltinFn
+import boneless.type.PrimitiveTypeEnum
 import boneless.type.Type
 import boneless.type.Typeable
 import boneless.type.typeable
@@ -8,16 +10,18 @@ import boneless.type.typeable
 typealias Identifier = String
 
 data class Module(val name: Identifier, val defs: Set<Def>)
-data class Def(val identifier: Identifier, val body: DefBody) : Typeable by typeable() {
+data class Def(val identifier: Identifier, val body: DefBody, val typeParams: List<TypeParam>) : Typeable by typeable() {
     sealed class DefBody {
-        data class ExprBody(val expr: Expression, val annotatedType: Type?): DefBody()
-        data class DataCtor(val datatype: Type): DefBody() {
+        data class ExprBody(val expr: Expression, val annotatedType: TypeExpr?): DefBody()
+        data class DataCtor(val datatype: TypeExpr): DefBody() {
             // Created by type-checker
             lateinit var nominalType: Type.NominalType
         }
         data class FnBody(val fn: Expression.Function): DefBody()
-        data class TypeAlias(val aliasedType: Type): DefBody()
+        data class TypeAlias(val aliasedType: TypeExpr): DefBody()
     }
+
+    class TypeParam(val identifier: Identifier)
 
     val is_type: Boolean = body is DefBody.TypeAlias
 }
@@ -33,7 +37,7 @@ sealed class Pattern : Typeable by typeable() {
     data class ListPattern(val elements: List<Pattern>): Pattern()
     data class RecordPattern(val fields: List<Pair<Identifier, Pattern>>): Pattern()
     data class CtorPattern(val callee: BindPoint, val args: List<Pattern>): Pattern()
-    data class TypeAnnotatedPattern(val pattern: Pattern, val annotatedType: Type): Pattern()
+    data class TypeAnnotatedPattern(val pattern: Pattern, val annotatedType: TypeExpr): Pattern()
 
     // Something is refutable (ie there are values of the type of the pattern that do not match the pattern)
     // as soon as it contains a literal.
@@ -50,7 +54,7 @@ sealed class Pattern : Typeable by typeable() {
 
 sealed class Expression : Typeable by typeable() {
     data class QuoteLiteral(val literal: Literal) : Expression()
-    data class QuoteType(val quotedType: Type) : Expression()
+    data class QuoteType(val quotedType: TypeExpr) : Expression()
 
     data class IdentifierRef(val id: BindPoint) : Expression()
 
@@ -58,14 +62,28 @@ sealed class Expression : Typeable by typeable() {
     data class RecordExpression(val fields: List<Pair<Identifier, Expression>>) : Expression()
 
     data class Invocation(val callee: Expression, val arg: Expression) : Expression()
-    data class Function(val param: Pattern, val body: Expression, val returnTypeAnnotation: Type? = null) : Expression()
+    data class Function(val param: Pattern, val body: Expression, val returnTypeAnnotation: TypeExpr? = null) : Expression()
 
-    data class Ascription(val expr: Expression, val ascribedType: Type) : Expression()
-    data class Cast(val expr: Expression, val destinationType: Type) : Expression()
+    data class Ascription(val expr: Expression, val ascribedType: TypeExpr) : Expression()
+    data class Cast(val expr: Expression, val destinationType: TypeExpr) : Expression()
 
     data class Sequence(val instructions: List<Instruction>, val yieldExpression: Expression?) : Expression()
     data class Conditional(val condition: Expression, val ifTrue: Expression, val ifFalse: Expression) : Expression()
     data class WhileLoop(val loopCondition: Expression, val body: Expression) : Expression()
+}
+
+sealed class TypeExpr {
+    data class PrimitiveType(val primitiveType: PrimitiveTypeEnum) : TypeExpr()
+    data class TypeNameRef(val callee: BindPoint) : TypeExpr()
+    data class RecordType(val elements: List<Pair<Identifier, TypeExpr>>) : TypeExpr()
+    data class TupleType(val elements: List<TypeExpr>) : TypeExpr() {
+        val isUnit: Boolean get() = elements.isEmpty()
+    }
+    data class ArrayType(val elementType: TypeExpr, val size: Int) : TypeExpr() {
+        val isDefinite: Boolean get() = size != 0
+    }
+    data class EnumType(val elements: List<Pair<Identifier, TypeExpr>>) : TypeExpr()
+    data class FnType(val dom: TypeExpr, val codom: TypeExpr) : TypeExpr()
 }
 
 sealed class Literal : Typeable by typeable() {

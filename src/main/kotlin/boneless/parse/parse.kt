@@ -124,18 +124,19 @@ class Parser(private val inputAsText: String, private val tokens: List<Tokenizer
 
     private fun expectModule(moduleName: String): Module {
         val defs = mutableListOf<Def>()
+        val typeParams = mutableListOf<Def.TypeParam>()
         while (true) {
             if (accept("data")) {
                 val identifier = expectIdentifier()
                 expect("=")
                 val body = Def.DefBody.DataCtor(expectType())
-                defs += Def(identifier, body)
+                defs += Def(identifier, body, typeParams)
                 expect(";")
             } else if (accept("type")) {
                 val identifier = expectIdentifier()
                 expect("=")
                 val body = Def.DefBody.TypeAlias(expectType())
-                defs += Def(identifier, body)
+                defs += Def(identifier, body, typeParams)
                 expect(";")
             } else if (accept("def")) {
                 val identifier = expectIdentifier()
@@ -144,7 +145,7 @@ class Parser(private val inputAsText: String, private val tokens: List<Tokenizer
                 val body = Def.DefBody.ExprBody(
                     acceptExpression(0) ?: unexpectedToken("expression"), annotatedType
                 )
-                defs += Def(identifier, body)
+                defs += Def(identifier, body, typeParams)
                 expect(";")
             } else if (accept("fn")) {
                 val identifier = expectIdentifier()
@@ -167,55 +168,57 @@ class Parser(private val inputAsText: String, private val tokens: List<Tokenizer
                     else -> expected("Expected non-refutable pattern")
                 }
                 val body = Def.DefBody.FnBody(fn)
-                defs += Def(identifier, body)
+                defs += Def(identifier, body, typeParams)
                 expect(";")
             } else break
         }
         return Module(moduleName, defs.toSet())
     }
 
-    private fun acceptTypeAnnotation(): Type? {
+    private fun acceptTypeAnnotation(): TypeExpr? {
         if (accept(":")) {
             return expectType()
         }
         return null
     }
 
-    fun expectType(): Type {
+    fun expectType(): TypeExpr {
         if (accept("fn")) {
             val dom = expectType()
             eat("->")
             val codom = expectType()
-            return Type.FnType(dom, codom)
+            return TypeExpr.FnType(dom, codom)
         }
 
         val calleeId = acceptIdentifier() ?: return eatTypeBrackets()
 
         val prim_type = PrimitiveTypeEnum.values().find { it.name == calleeId }
         if (prim_type != null)
-            return Type.PrimitiveType(prim_type)
+            return TypeExpr.PrimitiveType(prim_type)
 
-        val ops = mutableListOf<Expression>()
+        /*val ops = mutableListOf<Expression>()
         while (true) {
             ops += acceptExpression(0) ?: break
-        }
+        }*/
 
-        return Type.TypeApplication(
+        return TypeExpr.TypeNameRef(
             BindPoint.new(
                 calleeId
-            ), ops
+            )//, ops
         )
     }
 
-    fun eatTypeBrackets(): Type {
+    fun unit_type_expr() = TypeExpr.TupleType(emptyList())
+
+    fun eatTypeBrackets(): TypeExpr {
         expect("[")
         if (accept("]"))
-            return unit_type()
+            return unit_type_expr()
 
         try {
             val base = expectType()
             when {
-                base is Type.TypeApplication && base.args.isEmpty() && accept("=") -> {
+                base is TypeExpr.TypeNameRef && accept("=") -> {
                     val elems = mutableListOf(Pair(base.callee.identifier, expectType()))
                     when (front.tokenName) {
                         "," -> {
@@ -225,7 +228,7 @@ class Parser(private val inputAsText: String, private val tokens: List<Tokenizer
                                 val type = expectType()
                                 elems += Pair(id, type)
                             }
-                            return Type.RecordType(elems)
+                            return TypeExpr.RecordType(elems)
                         }
                         "|" -> {
                             while (accept("|")) {
@@ -234,7 +237,7 @@ class Parser(private val inputAsText: String, private val tokens: List<Tokenizer
                                 val type = expectType()
                                 elems += Pair(id, type)
                             }
-                            return Type.EnumType(elems)
+                            return TypeExpr.EnumType(elems)
                         }
                         else -> {
                             expected("',' or '|'")
@@ -247,14 +250,14 @@ class Parser(private val inputAsText: String, private val tokens: List<Tokenizer
                         val type = expectType()
                         elems += type
                     }
-                    return Type.TupleType(elems)
+                    return TypeExpr.TupleType(elems)
                 }
                 accept("..") -> {
-                    val num = acceptNumericalLiteral() ?: return Type.ArrayType(base, 0)
+                    val num = acceptNumericalLiteral() ?: return TypeExpr.ArrayType(base, 0)
                     val size = num.toIntOrNull()
                     if (size == null || size <= 0)
                         expected("non-zero integer number")
-                    return Type.ArrayType(base, size)
+                    return TypeExpr.ArrayType(base, size)
                 }
             }
 
@@ -329,7 +332,7 @@ class Parser(private val inputAsText: String, private val tokens: List<Tokenizer
                 val prim_type = PrimitiveTypeEnum.values().find { it.name == id }
                 if (prim_type != null)
                     return Expression.QuoteType(
-                        Type.PrimitiveType(
+                        TypeExpr.PrimitiveType(
                             prim_type
                         )
                     )
@@ -566,7 +569,7 @@ class Parser(private val inputAsText: String, private val tokens: List<Tokenizer
         return module
     }
 
-    fun parseType(): Type {
+    fun parseType(): TypeExpr {
         val type = expectType()
         expect("EOF")
         return type

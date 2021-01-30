@@ -120,19 +120,18 @@ class BindHelper(private val module: Module) {
         }
     }
 
-    fun bind(type: Type) {
+    fun bind(type: TypeExpr) {
         when(type) {
-            is Type.RecordType -> { type.elements.forEach { bind(it.second) } }
-            is Type.EnumType -> { type.elements.forEach { bind(it.second) } }
-            is Type.TupleType -> { type.elements.forEach(::bind) }
-            is Type.ArrayType -> bind(type.elementType)
-            is Type.TypeApplication -> {
+            is TypeExpr.RecordType -> { type.elements.forEach { bind(it.second) } }
+            is TypeExpr.EnumType -> { type.elements.forEach { bind(it.second) } }
+            is TypeExpr.TupleType -> { type.elements.forEach(::bind) }
+            is TypeExpr.ArrayType -> bind(type.elementType)
+            is TypeExpr.TypeNameRef -> {
                 type.callee.resolved_ = this[type.callee.identifier]
-                type.args.forEach(::bind)
+                //type.args.forEach(::bind)
             }
-            is Type.PrimitiveType -> {}
-            is Type.FnType -> { bind(type.dom) ; bind(type.codom)}
-            is Type.NominalType -> throw Exception("Inacessible: parser emits TypeApplications and type inference generates those !")
+            is TypeExpr.PrimitiveType -> {}
+            is TypeExpr.FnType -> { bind(type.dom) ; bind(type.codom)}
             else -> throw Exception("Unhandled ast node $type")
         }
     }

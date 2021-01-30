@@ -12,8 +12,6 @@ fun Type.normalize(): Type = when {
     else -> this
 }
 
-fun unit_type() = Type.TupleType(emptyList())
-
 fun type(module: Module) {
     TypeChecker(module).type()
 }
@@ -129,7 +127,7 @@ class TypeChecker(val module: Module) {
                 when (val r = expr.id.resolved) {
                     is BoundIdentifier.ToDef -> infer(r.def)
                     is BoundIdentifier.ToPatternBinder -> infer(r.binder)
-                    is BoundIdentifier.ToBuiltinFn -> r.fn.type
+                    is BoundIdentifier.ToBuiltinFn -> resolveType(r.fn.typeExpr)
                 }
             }
             is Expression.ListExpression -> {
@@ -195,7 +193,7 @@ class TypeChecker(val module: Module) {
                         is BoundIdentifier.ToDef -> infer(r.def,)
                         is BoundIdentifier.ToPatternBinder -> infer(r.binder)
                         is BoundIdentifier.ToBuiltinFn -> {
-                            r.fn.type
+                            resolveType(r.fn.typeExpr)
                         }
                     }, expected_type
                 )
@@ -408,13 +406,13 @@ class TypeChecker(val module: Module) {
         return when (boundIdentifier) {
             is BoundIdentifier.ToDef -> if (boundIdentifier.def.is_type) null else infer(boundIdentifier.def)
             is BoundIdentifier.ToPatternBinder -> infer(boundIdentifier.binder)
-            is BoundIdentifier.ToBuiltinFn -> boundIdentifier.fn.type
+            is BoundIdentifier.ToBuiltinFn -> resolveType(boundIdentifier.fn.typeExpr)
         }
     }
 
-    /** Removes type applications */
-    fun resolveType(type: Type): Type = when (type) {
-        is Type.TypeApplication -> {
+    /** Resolves TypeExprs */
+    fun resolveType(type: TypeExpr): Type = when (type) {
+        is TypeExpr.TypeNameRef -> {
             when (val resolved = type.callee.resolved) {
                 is BoundIdentifier.ToDef -> {
                     when (resolved.def.body) {
@@ -432,13 +430,12 @@ class TypeChecker(val module: Module) {
                 else -> error("let & pattern binders are not supported in typing ... for now anyways")
             }
         }
-        is Type.PrimitiveType -> type
-        is Type.RecordType -> type.copy(elements = type.elements.map { (i, t) -> Pair(i, resolveType(t)) })
-        is Type.TupleType -> type.copy(elements = type.elements.map { t -> resolveType(t) })
-        is Type.ArrayType -> type.copy(elementType = resolveType(type.elementType))
-        is Type.EnumType -> type.copy(elements = type.elements.map { (i, t) -> Pair(i, resolveType(t)) })
-        is Type.NominalType -> type.copy(dataType = resolveType(type.dataType))
-        is Type.FnType -> type.copy(dom = resolveType(type.dom), codom = resolveType(type.codom))
+        is TypeExpr.PrimitiveType -> Type.PrimitiveType(type.primitiveType)
+        is TypeExpr.RecordType -> Type.RecordType(elements = type.elements.map { (i, t) -> Pair(i, resolveType(t)) })
+        is TypeExpr.TupleType -> Type.TupleType(elements = type.elements.map { t -> resolveType(t) })
+        is TypeExpr.ArrayType -> Type.ArrayType(elementType = resolveType(type.elementType), size = type.size)
+        is TypeExpr.EnumType -> Type.EnumType(elements = type.elements.map { (i, t) -> Pair(i, resolveType(t)) })
+        is TypeExpr.FnType -> Type.FnType(dom = resolveType(type.dom), codom = resolveType(type.codom))
     }
 
     fun typeInstruction(inst: Instruction) {

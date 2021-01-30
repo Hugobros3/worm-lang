@@ -1,13 +1,11 @@
 package boneless.type
 
-import boneless.bind.BindPoint
 import boneless.core.BuiltinFn
-import boneless.Expression
 import boneless.Identifier
 
+/** Actual types, not AST type expressions */
 sealed class Type {
     data class PrimitiveType(val primitiveType: PrimitiveTypeEnum) : Type()
-    data class TypeApplication(val callee: BindPoint, val args: List<Expression>) : Type()
     data class RecordType(val elements: List<Pair<Identifier, Type>>) : Type()
     data class TupleType(val elements: List<Type>) : Type() {
         val isUnit: Boolean get() = elements.isEmpty()
@@ -19,3 +17,5 @@ sealed class Type {
     data class NominalType(val name: Identifier, val dataType: Type): Type()
     data class FnType(val dom: Type, val codom: Type, val constructorFor: NominalType? = null, val builtin: BuiltinFn? = null) : Type()
 }
+
+fun unit_type() = Type.TupleType(emptyList())
