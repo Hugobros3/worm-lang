@@ -14,6 +14,9 @@ class BytecodeBuilder(private val classFileBuilder: ClassFileBuilder) {
     private var locals = mutableListOf<JVMComputationalType>()
     private val stack = mutableListOf<JVMComputationalType>()
 
+    private val patches = mutableListOf<Patch>()
+    inner class Patch(val pos: Int, var data: Short)
+
     private fun pushStack(t: JVMComputationalType) {
         stack.add(t)
         max_stack = max(max_stack, stack.size)
@@ -145,6 +148,29 @@ class BytecodeBuilder(private val classFileBuilder: ClassFileBuilder) {
             else -> TODO()
         }
         pushStack(CT_Int)
+    }
+
+    fun branch_infeq_i32(ifTrue: () -> Unit, ifFalse: () -> Unit) {
+        popStack(CT_Int)
+        popStack(CT_Int)
+        val before_if = baos___.size()
+        instruction(JVMInstruction.if_icmple)
+        val ifTrueJumpLocation = Patch(baos___.size(), before_if.toShort())
+        patches += ifTrueJumpLocation
+        immediate_short(0)
+        ifFalse()
+
+        val before_goto = baos___.size()
+        instruction(JVMInstruction.goto)
+        val ifFalseJoinGoto = Patch(baos___.size(), baos___.size().toShort())
+        patches += ifFalseJoinGoto
+        immediate_short(0)
+
+        ifTrueJumpLocation.data = (baos___.size() - ifTrueJumpLocation.data).toShort()
+        println(ifTrueJumpLocation.data)
+
+        ifTrue()
+        ifFalseJoinGoto.data = (baos___.size() - before_goto.toShort()).toShort()
     }
 
     fun pushDefaultValueType(className: String) {
@@ -300,6 +326,11 @@ class BytecodeBuilder(private val classFileBuilder: ClassFileBuilder) {
 
     fun finish(): Attribute.Code {
         dos.flush()
-        return Attribute.Code(max_stack.toShort(), max_locals.toShort(), baos___.toByteArray(), emptyList(), emptyList())
+        val ba = baos___.toByteArray()
+        for (patch in patches) {
+            ba[patch.pos + 0] = ((patch.data.toInt() shr 8) and 0xff).toByte()
+            ba[patch.pos + 1] = ((patch.data.toInt() shr 0) and 0xff).toByte()
+        }
+        return Attribute.Code(max_stack.toShort(), max_locals.toShort(), ba, emptyList(), emptyList())
     }
 }

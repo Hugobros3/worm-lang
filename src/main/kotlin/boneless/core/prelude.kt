@@ -50,6 +50,8 @@ forall T contract Eq = [ eq = fn [T, T] -> Bool ];
 forall T contract Neq = [ neq = fn [T, T] -> Bool ];
 forall T contract Grt = [ grt = fn [T, T] -> Bool ];
 forall T contract GrtEq = [ grteq = fn [T, T] -> Bool ];
+
+instance InfEq::I32 = ( infeq = jvm_infeq_i32 );
 """.trimIndent()
 
 val prelude_cmp_module = createModule("Prelude_Cmp", prelude_cmp).also { bind(it) ; type(it) }

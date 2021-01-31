@@ -26,5 +26,7 @@ enum class BuiltinFn(val type: Type.FnType) {
     jvm_or_bool (Type.FnType(Type.TupleType(listOf(BoolT, BoolT)), BoolT)),
     jvm_xor_bool(Type.FnType(Type.TupleType(listOf(BoolT, BoolT)), BoolT)),
     jvm_not_bool(Type.FnType(BoolT, BoolT)),
+
+    jvm_infeq_i32(Type.FnType(Type.TupleType(listOf(I32T, I32T)), BoolT)),
     ;
 }

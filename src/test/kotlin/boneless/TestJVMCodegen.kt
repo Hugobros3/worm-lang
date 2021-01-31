@@ -132,15 +132,15 @@ class TestJVMCodegen {
         emit(mod, outputDir)
     }
 
-    /*@Test
+    @Test
     fun testFactorial() {
-        val mod = module("TestAddition","""
+        val mod = module("TestFactorial","""
             fn fac(n: I32) => {
-                if
+                n <= 2
             };
         """.trimIndent())
 
         val outputDir = File("test_out/")
         emit(mod, outputDir)
-    }*/
+    }
 }

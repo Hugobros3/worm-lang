@@ -40,7 +40,7 @@ val defaultFieldAccessFlags = FieldAccessFlags(
     acc_volatile = false,
 )
 
-val lw2jvm = JavaVersion(minor = 0, major = 58)
+val lw2jvm = JavaVersion(major = 58, minor = 0)
 
 class ClassFileBuilder(val version: JavaVersion = lw2jvm, val className: String, val accessFlags: ClassAccessFlags, val superName: String = "java.lang.Object") {
     val constantPool = mutableListOf<ConstantPoolEntry>(dummyCPEntry)
