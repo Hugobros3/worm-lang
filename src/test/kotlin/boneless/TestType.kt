@@ -267,4 +267,19 @@ class TestType {
             fn dot2(a: Vec3::F32, b: Vec3::F32) -> F32 = dot(a, b);
         """.trimIndent())
     }
+
+    @Test
+    fun testRectangle() {
+        testType("""
+            data Point = [I32, I32];
+            data Rectangle = [min = Point, max = Point];
+
+            forall T
+            contract Shape = [ get_area = fn T -> I32 ];
+
+            instance Shape::Rectangle = (
+                get_area = fn Rectangle(min = Point (sx, sy), max = Point (ex, ey)) => (ex - sx) * (ey - sy)
+            );
+        """.trimIndent())
+    }
 }
