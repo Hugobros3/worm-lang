@@ -30,6 +30,8 @@ fun getMethodDescriptor(fnType: Type.FnType): MethodDescriptor {
     return MethodDescriptor(listOf(dom).filterNotNull(), codom)
 }
 
+fun getTupleInitializationMethodDescriptor(tupleType: Type.TupleType) = MethodDescriptor(tupleType.elements.mapNotNull { getFieldDescriptor(it) }, ReturnDescriptor.NonVoidDescriptor(getFieldDescriptor(tupleType)!!))
+
 fun mangled_datatype_name(type: Type): String = when(type) {
     is Type.TypeParam -> throw Exception("Type params should be monomorphized !")
     is Type.PrimitiveType -> "Primitive${type.primitiveType.name}"
@@ -44,7 +46,36 @@ fun mangled_datatype_name(type: Type): String = when(type) {
 
 fun mangled_contract_instance_name(contractName: String, argumentsExpr: List<Type>): String = "BL_INST_$contractName$"+argumentsExpr.joinToString("_") { mangled_datatype_name(it) }
 
-fun tuple_type_init_descriptor(tupleType: Type.TupleType) = MethodDescriptor(tupleType.elements.mapNotNull { getFieldDescriptor(it) }, ReturnDescriptor.NonVoidDescriptor(getFieldDescriptor(tupleType)!!))
+fun ClassFileBuilder.getVerificationType(type: Type): VerificationType? = when(type) {
+    is Type.PrimitiveType -> when(type.primitiveType) {
+        PrimitiveTypeEnum.Bool -> VerificationType.Integer
+        PrimitiveTypeEnum.I32 -> VerificationType.Integer
+        PrimitiveTypeEnum.I64 -> VerificationType.Long
+        PrimitiveTypeEnum.F32 -> VerificationType.Float
+    }
+    is Type.RecordType -> TODO()
+    is Type.TupleType -> if (type == unit_type()) null else VerificationType.Object(constantClass(mangled_datatype_name(type)).toInt())
+    is Type.ArrayType -> TODO()
+    is Type.EnumType -> TODO()
+    is Type.NominalType -> TODO()
+    is Type.FnType -> TODO()
+    is Type.TypeParam -> TODO()
+    Type.Top -> TODO()
+}
+
+fun ClassFileBuilder.getVerificationType(fieldDescriptor: FieldDescriptor) = when(fieldDescriptor) {
+    FieldDescriptor.BaseType.Z,
+    FieldDescriptor.BaseType.B,
+    FieldDescriptor.BaseType.C,
+    FieldDescriptor.BaseType.S,
+    FieldDescriptor.BaseType.I -> VerificationType.Integer
+    FieldDescriptor.BaseType.F -> VerificationType.Float
+    FieldDescriptor.BaseType.J -> VerificationType.Long
+    FieldDescriptor.BaseType.D -> VerificationType.Double
+    is FieldDescriptor.ReferenceType.NullableClassType -> VerificationType.Object(constantClass(fieldDescriptor.className).toInt())
+    is FieldDescriptor.ReferenceType.NullFreeClassType -> VerificationType.Object(constantClass(fieldDescriptor.className).toInt())
+    is FieldDescriptor.ReferenceType.ArrayType -> TODO()
+}
 
 fun Emitter.emit_datatype_classfile_if_needed(type: Type) {
     when (type) {
@@ -63,25 +94,25 @@ fun Emitter.emit_datatype_classfile_if_needed(type: Type) {
                     builder.field("_$i", getFieldDescriptor(element)!!, defaultFieldAccessFlags.copy(acc_final = true))
                 }
 
-                val initDescriptor = tuple_type_init_descriptor(type)
+                val initDescriptor = getTupleInitializationMethodDescriptor(type)
                 val initCodeBuilder = BytecodeBuilder(builder)
                 val params = type.elements.mapIndexed { i, t ->
                     val fd = getFieldDescriptor(t)
                     if (fd != null) {
-                        initCodeBuilder.reserveVariable(fd.toActualJVMType().asComputationalType)
+                        initCodeBuilder.reserveVariable(t)
                     } else null
                 }
 
                 val mangled_dt = mangled_datatype_name(type)
                 initCodeBuilder.pushDefaultValueType(mangled_dt)
-                for ((i, element) in type.elements.withIndex()) {
-                    if (element == unit_type())
+                for ((i, elementType) in type.elements.withIndex()) {
+                    if (elementType == unit_type())
                         continue
                     initCodeBuilder.loadVariable(params[i]!!)
                     val fieldName = "_$i"
-                    initCodeBuilder.mutateSetFieldName(mangled_dt, fieldName, getFieldDescriptor(element)!!)
+                    initCodeBuilder.mutateSetFieldName(mangled_dt, fieldName, elementType, type)
                 }
-                initCodeBuilder.return_value(getFieldDescriptor(type)!!.toActualJVMType())
+                initCodeBuilder.return_value(type)
 
                 val attributes = initCodeBuilder.finish()
                 builder.method("<init>", initDescriptor, defaulMethodAccessFlags.copy(acc_static = true, acc_public = true), attributes)
@@ -97,5 +128,8 @@ fun Emitter.emit_datatype_classfile_if_needed(type: Type) {
             emit_datatype_classfile_if_needed(type.dom)
             emit_datatype_classfile_if_needed(type.codom)
         }
+        is Type.TypeParam -> TODO()
+        Type.Top -> TODO()
+        else -> throw Exception("Unhandled type: $type")
     }
 }

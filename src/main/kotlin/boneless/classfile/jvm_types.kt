@@ -1,7 +1,7 @@
 package boneless.classfile
 
+import boneless.classfile.JVMActualType.*
 import boneless.classfile.JVMComputationalType.*
-import jdk.jfr.internal.JVM
 
 sealed class FieldDescriptor {
     sealed class BaseType : FieldDescriptor() {
@@ -30,17 +30,17 @@ sealed class FieldDescriptor {
     }
 
     fun toActualJVMType(): JVMActualType = when(this) {
-        BaseType.B -> JVMActualType.AT_Byte
-        BaseType.C -> JVMActualType.AT_Char
-        BaseType.D -> JVMActualType.AT_Double
-        BaseType.F -> JVMActualType.AT_Float
-        BaseType.I -> JVMActualType.AT_Int
-        BaseType.J -> JVMActualType.AT_Long
-        BaseType.S -> JVMActualType.AT_Short
-        BaseType.Z -> JVMActualType.AT_Boolean
-        is ReferenceType.NullableClassType -> JVMActualType.AT_Reference
-        is ReferenceType.NullFreeClassType -> JVMActualType.AT_Reference
-        is ReferenceType.ArrayType -> JVMActualType.AT_Reference
+        BaseType.B -> AT_Byte
+        BaseType.C -> AT_Char
+        BaseType.D -> AT_Double
+        BaseType.F -> AT_Float
+        BaseType.I -> AT_Int
+        BaseType.J -> AT_Long
+        BaseType.S -> AT_Short
+        BaseType.Z -> AT_Boolean
+        is ReferenceType.NullableClassType -> AT_Reference
+        is ReferenceType.NullFreeClassType -> AT_Reference
+        is ReferenceType.ArrayType -> AT_Reference
     }
 }
 
@@ -97,3 +97,17 @@ sealed class VerificationType {
         return javaClass.simpleName
     }
 }
+
+fun VerificationType.toActualType(): JVMActualType = when(this) {
+    VerificationType.Top -> throw Exception("Who knows ?")
+    VerificationType.Integer -> AT_Int
+    VerificationType.Float -> AT_Float
+    VerificationType.Null -> AT_Reference
+    VerificationType.UninitializedThis -> TODO() // not sure
+    is VerificationType.Object -> AT_Reference
+    is VerificationType.Uninitialized -> TODO() // not sure
+    VerificationType.Long -> AT_Long
+    VerificationType.Double -> AT_Double
+}
+
+fun VerificationType.toComputationalType() = toActualType().asComputationalType

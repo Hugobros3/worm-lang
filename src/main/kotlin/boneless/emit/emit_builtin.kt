@@ -10,7 +10,7 @@ fun Emitter.emit_builtin_fn_classfile(): ClassFile {
     fun emit_builtin_fn(builtin: BuiltinFn) {
         val builder = BytecodeBuilder(cfBuilder)
         val argsType = builtin.type.dom
-        builder.reserveVariable(getFieldDescriptor(argsType)!!.toActualJVMType().asComputationalType)
+        builder.reserveVariable(argsType)
 
         fun access_arg() {
             builder.loadVariable(0)
@@ -19,7 +19,7 @@ fun Emitter.emit_builtin_fn_classfile(): ClassFile {
         fun access_arg_extract(n: Int) {
             access_arg()
             val arg_type: Type = (argsType as Type.TupleType).elements[n]
-            builder.getField(mangled_datatype_name(argsType), "_$n", getFieldDescriptor(arg_type)!!)
+            builder.getField(mangled_datatype_name(argsType), "_$n", arg_type)
         }
 
         when(builtin) {
@@ -114,7 +114,7 @@ fun Emitter.emit_builtin_fn_classfile(): ClassFile {
             else -> throw Exception("Missing codegen for intrinsic ${builtin}")
         }
 
-        builder.return_value(getFieldDescriptor(builtin.type.codom)!!.toActualJVMType())
+        builder.return_value(builtin.type.codom)
 
         val attributes = builder.finish()
         val descriptor = getMethodDescriptor(builtin.type)

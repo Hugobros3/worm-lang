@@ -20,7 +20,7 @@ class FunctionEmitter(private val emitter: Emitter, val fn: Expression.Function,
 
     init {
         if (type.dom != unit_type()) {
-            val argument_local_var = builder.reserveVariable(emitter.getFieldDescriptor(type.dom)!!.toActualJVMType().asComputationalType)
+            val argument_local_var = builder.reserveVariable(type.dom)
             val procedure: PutOnStack = {
                 builder.loadVariable(argument_local_var)
             }
@@ -44,7 +44,7 @@ class FunctionEmitter(private val emitter: Emitter, val fn: Expression.Function,
         if (fn.body.type!! == unit_type()) {
             builder.return_void()
         } else {
-            builder.return_value(emitter.getFieldDescriptor(type.codom)!!.toActualJVMType())
+            builder.return_value(type.codom)
         }
 
         return builder.finish()
@@ -70,7 +70,7 @@ class FunctionEmitter(private val emitter: Emitter, val fn: Expression.Function,
                         // the JVM's good reputation for being really good at optmizing away fn calls will save our bacon :)
                         for (element in expr.elements)
                             emit(element)
-                        builder.callStatic(emitter.mangled_datatype_name(expr.type!!), "<init>", emitter.tuple_type_init_descriptor(type))
+                        builder.callStaticInternal(mangled_datatype_name(expr.type!!), "<init>", getTupleInitializationMethodDescriptor(type), cfBuilder.getVerificationType(type))
                     }
                     else -> throw Exception("cannot emit a list expression as a ${expr.type}")
                 }
@@ -83,7 +83,7 @@ class FunctionEmitter(private val emitter: Emitter, val fn: Expression.Function,
                         is TermLocation.BinderRef -> TODO()
                         is TermLocation.BuiltinFnRef -> {
                             emit(expr.arg)
-                            builder.callStatic("BuiltinFns", r.fn.name, emitter.getMethodDescriptor(r.fn.type))
+                            builder.callStatic("BuiltinFns", r.fn.name, r.fn.type)
                             return
                         }
                         is TermLocation.TypeParamRef -> TODO()
@@ -93,7 +93,7 @@ class FunctionEmitter(private val emitter: Emitter, val fn: Expression.Function,
                             val def = r.def
                             if (def.body is Def.DefBody.Contract) {
                                 emit(expr.arg)
-                                builder.callStatic(emitter.mangled_contract_instance_name(def.identifier, expr.callee.expression.deducedImplicitSpecializationArguments!!), expr.callee.id, emitter.getMethodDescriptor(expr.callee.type as Type.FnType))
+                                builder.callStatic(mangled_contract_instance_name(def.identifier, expr.callee.expression.deducedImplicitSpecializationArguments!!), expr.callee.id, expr.callee.type as Type.FnType)
                                 return
                             }
                         }
@@ -125,7 +125,7 @@ class FunctionEmitter(private val emitter: Emitter, val fn: Expression.Function,
     fun emit(instruction: Instruction) {
         when(instruction) {
             is Instruction.Let -> {
-                val argument_local_var = builder.reserveVariable(emitter.getFieldDescriptor(instruction.pattern.type!!)!!.toActualJVMType().asComputationalType)
+                val argument_local_var = builder.reserveVariable(instruction.pattern.type!!)
 
                 emit(instruction.body)
                 builder.setVariable(argument_local_var)

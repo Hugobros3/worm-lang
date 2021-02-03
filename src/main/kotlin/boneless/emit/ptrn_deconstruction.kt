@@ -20,7 +20,7 @@ fun Emitter.registerPattern(map: MutableMap<Pattern, PutOnStack>, pattern: Patte
                             continue
                         val extract_element_procedure: PutOnStack = { builder ->
                             procedure(builder)
-                            builder.getField(mangled_datatype_name(type), "_$i", getFieldDescriptor(subpattern.type!!)!!)
+                            builder.getField(mangled_datatype_name(type), "_$i", subpattern.type!!)
                         }
                         registerPattern(map, subpattern, extract_element_procedure)
                     }
