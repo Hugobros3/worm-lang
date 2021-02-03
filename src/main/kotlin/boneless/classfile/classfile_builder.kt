@@ -80,10 +80,11 @@ class ClassFileBuilder(val version: JavaVersion = lw2jvm, val className: String,
         return findOrPutInCPool({ it.class_index == classIndex && it.name_and_type_index == nameAndTypeIndex }){ConstantPoolData.MethodRefInfo(classIndex, nameAndTypeIndex)}
     }
 
-    fun method(methodName: String, descriptor: MethodDescriptor, accessFlags: MethodAccessFlags, code: Attribute.Code) {
+    fun method(methodName: String, descriptor: MethodDescriptor, accessFlags: MethodAccessFlags, attributes: List<Attribute>) {
         val nameIndex = constantUTF(methodName)
         val descriptor_index = constantUTF(descriptor.toString())
-        methods.add(MethodInfo(accessFlags, nameIndex, descriptor_index, listOf(AttributeInfo(constantUTF("Code"), interpreted = code, uninterpreted = null))))
+        val wrapped_attributes = attributes.map { AttributeInfo(constantUTF(it.serializedName), interpreted = it, uninterpreted = null) }
+        methods.add(MethodInfo(accessFlags, nameIndex, descriptor_index, wrapped_attributes))
     }
 
     fun field(fieldName: String, descriptor: FieldDescriptor, accessFlags: FieldAccessFlags) {

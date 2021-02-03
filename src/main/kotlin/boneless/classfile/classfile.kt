@@ -139,6 +139,9 @@ data class MethodAccessFlags(
 data class AttributeInfo(val attribute_name_index: Short, val uninterpreted: ByteArray?, val interpreted: Attribute?)
 
 sealed class Attribute {
+    val serializedName: String
+        get() = javaClass.simpleName
+
     data class ConstantValue(val constant_value_index: Short): Attribute()
     data class Code(val max_stack: Short, val max_locals: Short, val code: ByteArray, val exception_table: List<ExceptionTableEntry>, val attributes: List<AttributeInfo>): Attribute() {
         data class ExceptionTableEntry(val start_pc: Short, val end_pc: Short, val handler_pc: Short, val catch_type: Short)

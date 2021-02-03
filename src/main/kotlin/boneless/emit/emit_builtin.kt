@@ -105,7 +105,7 @@ fun Emitter.emit_builtin_fn_classfile(): ClassFile {
             BuiltinFn.jvm_infeq_i32 -> {
                 access_arg_extract(0)
                 access_arg_extract(1)
-                builder.branch_infeq_i32({
+                builder.branch_infeq_i32(JVMComputationalType.CT_Int, {
                     builder.pushInt(1)
                 }, {
                     builder.pushInt(0)
@@ -116,9 +116,9 @@ fun Emitter.emit_builtin_fn_classfile(): ClassFile {
 
         builder.return_value(getFieldDescriptor(builtin.type.codom)!!.toActualJVMType())
 
-        val code = builder.finish()
+        val attributes = builder.finish()
         val descriptor = getMethodDescriptor(builtin.type)
-        cfBuilder.method(builtin.name, descriptor, defaulMethodAccessFlags.copy(acc_final = true, acc_static = true), code)
+        cfBuilder.method(builtin.name, descriptor, defaulMethodAccessFlags.copy(acc_final = true, acc_static = true), attributes)
     }
 
     for (builtin in BuiltinFn.values())

@@ -17,6 +17,8 @@ class BytecodeBuilder(private val classFileBuilder: ClassFileBuilder) {
     private val patches = mutableListOf<Patch>()
     inner class Patch(val pos: Int, var data: Short)
 
+    private val stackMapFrames = mutableListOf<Attribute.StackMapTable.StackMapFrame>()
+
     private fun pushStack(t: JVMComputationalType) {
         stack.add(t)
         max_stack = max(max_stack, stack.size)
@@ -26,6 +28,8 @@ class BytecodeBuilder(private val classFileBuilder: ClassFileBuilder) {
         assert(t == expected) { "Popped $t, expected $expected" }
         return t
     }
+
+    private fun position(): Int = baos___.size()
 
     private fun instruction(i: JVMInstruction) {
         dos.writeByte(i.opcode)
@@ -150,27 +154,34 @@ class BytecodeBuilder(private val classFileBuilder: ClassFileBuilder) {
         pushStack(CT_Int)
     }
 
-    fun branch_infeq_i32(ifTrue: () -> Unit, ifFalse: () -> Unit) {
+    fun patchable_short(): Patch {
+        val now = position()
+        immediate_short(0) // patched out afterwards
+        val patch = Patch(now, 0)
+        patches += patch
+        return patch
+    }
+
+    fun branch_infeq_i32(yieldType: JVMComputationalType?, ifTrue: () -> Unit, ifFalse: () -> Unit) {
         popStack(CT_Int)
         popStack(CT_Int)
-        val before_if = baos___.size()
+
+        val before_if = position()
         instruction(JVMInstruction.if_icmple)
-        val ifTrueJumpLocation = Patch(baos___.size(), before_if.toShort())
-        patches += ifTrueJumpLocation
-        immediate_short(0)
+        val ifTrueJumpLocation = patchable_short()
         ifFalse()
 
-        val before_goto = baos___.size()
+        // Goto statement after the "false" segment to join with the "true" section
+        val before_goto = position()
         instruction(JVMInstruction.goto)
-        val ifFalseJoinGoto = Patch(baos___.size(), baos___.size().toShort())
-        patches += ifFalseJoinGoto
-        immediate_short(0)
+        val ifFalseJoinGoto = patchable_short()
 
-        ifTrueJumpLocation.data = (baos___.size() - ifTrueJumpLocation.data).toShort()
-        println(ifTrueJumpLocation.data)
-
+        val ifTrueTarget = position()
         ifTrue()
-        ifFalseJoinGoto.data = (baos___.size() - before_goto.toShort()).toShort()
+        ifTrueJumpLocation.data = (ifTrueTarget - before_if).toShort()
+
+        val joinTarget = position()
+        ifFalseJoinGoto.data = (joinTarget - before_goto).toShort()
     }
 
     fun pushDefaultValueType(className: String) {
@@ -324,13 +335,28 @@ class BytecodeBuilder(private val classFileBuilder: ClassFileBuilder) {
         pushStack(CT_Int)
     }
 
-    fun finish(): Attribute.Code {
+    fun finish(): List<Attribute> {
         dos.flush()
         val ba = baos___.toByteArray()
         for (patch in patches) {
             ba[patch.pos + 0] = ((patch.data.toInt() shr 8) and 0xff).toByte()
             ba[patch.pos + 1] = ((patch.data.toInt() shr 0) and 0xff).toByte()
         }
-        return Attribute.Code(max_stack.toShort(), max_locals.toShort(), ba, emptyList(), emptyList())
+        val code = Attribute.Code(max_stack.toShort(), max_locals.toShort(), ba, emptyList(), emptyList())
+        val attributes = mutableListOf<Attribute>(code)
+        if (stackMapFrames.isNotEmpty()) {
+            val stackMapTable = Attribute.StackMapTable(stackMapFrames)
+            attributes.add(stackMapTable)
+        }
+        return attributes
     }
+}
+
+fun JVMComputationalType.toVerifType() = when(this) {
+    CT_Int -> Attribute.StackMapTable.VerificationType.Integer
+    CT_Float -> Attribute.StackMapTable.VerificationType.Float
+    CT_Long -> Attribute.StackMapTable.VerificationType.Long
+    CT_Double -> Attribute.StackMapTable.VerificationType.Double
+    CT_Reference -> Attribute.StackMapTable.VerificationType.Object(TODO())
+    CT_ReturnAddress -> throw Exception("Disallowed")
 }

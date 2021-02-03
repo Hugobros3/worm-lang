@@ -4,7 +4,6 @@ import boneless.*
 import boneless.bind.TermLocation
 import boneless.bind.get_def
 import boneless.classfile.*
-import boneless.core.BuiltinFn
 import boneless.core.prelude_modules
 import boneless.type.PrimitiveTypeEnum
 import boneless.type.Type
@@ -117,7 +116,8 @@ class Emitter(val modules: List<Module>, val outputDir: File) {
                     }
                     initCodeBuilder.return_value(getFieldDescriptor(type)!!.toActualJVMType())
 
-                    builder.method("<init>", initDescriptor, defaulMethodAccessFlags.copy(acc_static = true, acc_public = true), initCodeBuilder.finish())
+                    val attributes = initCodeBuilder.finish()
+                    builder.method("<init>", initDescriptor, defaulMethodAccessFlags.copy(acc_static = true, acc_public = true), attributes)
                     builder.finish()
                 }
                 for (element in type.elements)
@@ -147,8 +147,8 @@ class Emitter(val modules: List<Module>, val outputDir: File) {
                 val descriptor = getMethodDescriptor(fnt)
                 when (d) {
                     is Expression.Function -> {
-                        val code = FunctionEmitter(d, builder).emit()
-                        builder.method(f, descriptor, defaulMethodAccessFlags.copy(acc_final = true, acc_static = true), code)
+                        val attributes = FunctionEmitter(this, d, builder).emit()
+                        builder.method(f, descriptor, defaulMethodAccessFlags.copy(acc_final = true, acc_static = true), attributes)
                     }
                     is Expression.IdentifierRef -> when(val r = d.id.resolved) {
                         is TermLocation.DefRef -> TODO()
@@ -156,8 +156,8 @@ class Emitter(val modules: List<Module>, val outputDir: File) {
                         is TermLocation.BuiltinFnRef -> {
                             val wrapper = fn_wrapper(d)
                             println(wrapper.prettyPrint())
-                            val code = FunctionEmitter(wrapper, builder).emit()
-                            builder.method(f, descriptor, defaulMethodAccessFlags.copy(acc_final = true, acc_static = true), code)
+                            val attributes = FunctionEmitter(this, wrapper, builder).emit()
+                            builder.method(f, descriptor, defaulMethodAccessFlags.copy(acc_final = true, acc_static = true), attributes)
                         }
                         is TermLocation.TypeParamRef -> TODO()
                     }
@@ -178,8 +178,8 @@ class Emitter(val modules: List<Module>, val outputDir: File) {
                 is Def.DefBody.DataCtor -> TODO()
                 is Def.DefBody.FnBody -> {
                     val descriptor = getMethodDescriptor(def.type as Type.FnType)
-                    val code = FunctionEmitter(def.body.fn, builder).emit()
-                    builder.method(def.identifier, descriptor, defaulMethodAccessFlags.copy(acc_final = true, acc_static = true), code)
+                    val attributes = FunctionEmitter(this, def.body.fn, builder).emit()
+                    builder.method(def.identifier, descriptor, defaulMethodAccessFlags.copy(acc_final = true, acc_static = true), attributes)
                 }
                 is Def.DefBody.TypeAlias -> {
                     emit_datatype_classfile_if_needed(def.type!!)
@@ -192,137 +192,7 @@ class Emitter(val modules: List<Module>, val outputDir: File) {
         return builder.finish()
     }
 
-    inner class FunctionEmitter(val fn: Expression.Function, val cfBuilder: ClassFileBuilder) {
-        val type = fn.type!! as Type.FnType
-        val builder = BytecodeBuilder(cfBuilder)
-
-        //val parameter: Int
-        val patternsAccess = mutableListOf<Map<Pattern, PutOnStack>>()
-
-        init {
-            if (type.dom != unit_type()) {
-                val argument_local_var = builder.reserveVariable(getFieldDescriptor(type.dom)!!.toActualJVMType().asComputationalType)
-                val procedure: PutOnStack = {
-                    builder.loadVariable(argument_local_var)
-                }
-                val m = mutableMapOf<Pattern, PutOnStack>()
-                registerPattern(m, fn.param, procedure)
-                patternsAccess += m
-            }
-            // println(patternsAccess)
-        }
-
-        fun accessPtrn(pattern: Pattern) {
-            for (frame in patternsAccess) {
-                (frame[pattern] ?: continue).invoke(builder)
-                return
-            }
-            throw Exception("$pattern is not accessible")
-        }
-
-        fun emit(): Attribute.Code {
-            emit(fn.body)
-            if (fn.body.type!! == unit_type()) {
-                builder.return_void()
-            } else {
-                builder.return_value(getFieldDescriptor(type.codom)!!.toActualJVMType())
-            }
-
-            return builder.finish()
-        }
-
-        private fun emit(expr: Expression) {
-            emit_datatype_classfile_if_needed(expr.type!!)
-            when (expr) {
-                is Expression.QuoteLiteral -> emit(builder, expr.literal)
-                is Expression.QuoteType -> TODO()
-                is Expression.IdentifierRef -> when(val r = expr.id.resolved) {
-                    is TermLocation.DefRef -> TODO()
-                    is TermLocation.BinderRef -> accessPtrn(r.binder)
-                    is TermLocation.BuiltinFnRef -> throw Exception("Not allowed / (should not be) possible")
-                }
-                is Expression.ListExpression -> {
-                    when (val type = expr.type!!) {
-                        is Type.TupleType -> {
-                            if (type == unit_type())
-                                return
-                            // Because of reasons (I suspect having to do with ABI stability), we do not actually have the permission to build a tuple "manually"
-                            // outside of its declaring class. Instead, we are required to call the constructor for it, which is mildly ugly but hopefully
-                            // the JVM's good reputation for being really good at optmizing away fn calls will save our bacon :)
-                            for (element in expr.elements)
-                                emit(element)
-                            builder.callStatic(mangled_datatype_name(expr.type!!), "<init>", tuple_type_init_descriptor(type))
-                        }
-                        else -> throw Exception("cannot emit a list expression as a ${expr.type}")
-                    }
-                }
-                is Expression.RecordExpression -> TODO()
-                is Expression.Invocation -> {
-                    when {
-                        expr.callee is Expression.IdentifierRef -> when (val r = expr.callee.id.resolved) {
-                            is TermLocation.DefRef -> TODO()
-                            is TermLocation.BinderRef -> TODO()
-                            is TermLocation.BuiltinFnRef -> {
-                                emit(expr.arg)
-                                builder.callStatic("BuiltinFns", r.fn.name, getMethodDescriptor(r.fn.type))
-                                return
-                            }
-                            is TermLocation.TypeParamRef -> TODO()
-                        }
-                        expr.callee is Expression.Projection && expr.callee.expression is Expression.IdentifierRef -> when(val r = expr.callee.expression.id.resolved) {
-                            is TermLocation.DefRef -> {
-                                val def = r.def
-                                if (def.body is Def.DefBody.Contract) {
-                                    emit(expr.arg)
-                                    builder.callStatic(mangled_contract_instance_name(def.identifier, expr.callee.expression.deducedImplicitSpecializationArguments!!), expr.callee.id, getMethodDescriptor(expr.callee.type as Type.FnType))
-                                    return
-                                }
-                            }
-                        }
-                    }
-
-                    TODO("perform actual call")
-                }
-                is Expression.Function -> TODO()
-                is Expression.Ascription -> TODO()
-                is Expression.Cast -> TODO()
-                is Expression.Sequence -> {
-                    builder.enterScope {
-                        for (instruction in expr.instructions)
-                            emit(instruction)
-                        if (expr.yieldExpression != null)
-                            emit(expr.yieldExpression)
-                    }
-                }
-                is Expression.Conditional -> TODO()
-                is Expression.WhileLoop -> TODO()
-            }
-        }
-
-        fun emit_tuple(elements: List<Expression>) {
-            TODO()
-        }
-
-        fun emit(instruction: Instruction) {
-            when(instruction) {
-                is Instruction.Let -> {
-                    val argument_local_var = builder.reserveVariable(getFieldDescriptor(instruction.pattern.type!!)!!.toActualJVMType().asComputationalType)
-
-                    emit(instruction.body)
-                    builder.setVariable(argument_local_var)
-                    val procedure: PutOnStack = {
-                        builder.loadVariable(argument_local_var)
-                    }
-                    val m = mutableMapOf<Pattern, PutOnStack>()
-                    registerPattern(m, instruction.pattern, procedure)
-                    patternsAccess += m
-                }
-                is Instruction.Evaluate -> TODO()
-            }
-        }
-    }
-
-    private fun emit(builder: BytecodeBuilder, literal: Literal) {
+    internal fun emit(builder: BytecodeBuilder, literal: Literal) {
         when (literal) {
             is Literal.NumLiteral -> {
                 when((literal.type as Type.PrimitiveType).primitiveType) {
