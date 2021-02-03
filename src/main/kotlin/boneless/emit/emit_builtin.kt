@@ -105,7 +105,7 @@ fun Emitter.emit_builtin_fn_classfile(): ClassFile {
             BuiltinFn.jvm_infeq_i32 -> {
                 access_arg_extract(0)
                 access_arg_extract(1)
-                builder.branch_infeq_i32(JVMComputationalType.CT_Int, {
+                builder.branch_infeq_i32({
                     builder.pushInt(1)
                 }, {
                     builder.pushInt(0)

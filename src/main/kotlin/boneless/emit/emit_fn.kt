@@ -106,7 +106,7 @@ class FunctionEmitter(private val emitter: Emitter, val fn: Expression.Function,
             is Expression.Ascription -> TODO()
             is Expression.Cast -> TODO()
             is Expression.Sequence -> {
-                builder.enterScope {
+                builder.enterScope(expr.type!!) {
                     for (instruction in expr.instructions)
                         emit(instruction)
                     if (expr.yieldExpression != null)

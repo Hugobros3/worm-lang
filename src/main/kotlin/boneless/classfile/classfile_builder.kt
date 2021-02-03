@@ -83,7 +83,7 @@ class ClassFileBuilder(val version: JavaVersion = lw2jvm, val className: String,
     fun method(methodName: String, descriptor: MethodDescriptor, accessFlags: MethodAccessFlags, attributes: List<Attribute>) {
         val nameIndex = constantUTF(methodName)
         val descriptor_index = constantUTF(descriptor.toString())
-        val wrapped_attributes = attributes.map { AttributeInfo(constantUTF(it.serializedName), interpreted = it, uninterpreted = null) }
+        val wrapped_attributes = attributes.map { it.wrap(this) }
         methods.add(MethodInfo(accessFlags, nameIndex, descriptor_index, wrapped_attributes))
     }
 

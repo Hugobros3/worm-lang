@@ -1,13 +1,15 @@
 package boneless.classfile
 
-import boneless.classfile.JVMComputationalType.*
 import boneless.emit.getFieldDescriptor
 import boneless.emit.getMethodDescriptor
 import boneless.emit.getVerificationType
 import boneless.type.Type
+import boneless.type.unit_type
 import java.io.ByteArrayOutputStream
 import java.io.DataOutputStream
 import java.lang.Integer.max
+
+data class JumpTarget(internal val bytecodeOffset: Int)
 
 class BytecodeBuilder(private val classFileBuilder: ClassFileBuilder) {
     private var max_stack = 0
@@ -15,20 +17,40 @@ class BytecodeBuilder(private val classFileBuilder: ClassFileBuilder) {
     private val baos___ = ByteArrayOutputStream()
     private val dos = DataOutputStream(baos___)
 
-    private var locals = mutableListOf<VerificationType>()
-    private val stack = mutableListOf<VerificationType>()
+    private var locals = emptyList<VerificationType>()
+    private var stack = emptyList<VerificationType>()
 
     private val patches = mutableListOf<Patch>()
-    inner class Patch(val pos: Int, var data: Short)
+    sealed class Patch {
+        class ShortPatch(override val bytecodeLocation: Int, var data: Short) : Patch() {
+            override fun apply_patch(ba: ByteArray) {
+                ba[bytecodeLocation + 0] = ((data.toInt() shr 8) and 0xff).toByte()
+                ba[bytecodeLocation + 1] = ((data.toInt() shr 0) and 0xff).toByte()
+            }
+        }
+        class JumpTargetPatch(override val bytecodeLocation: Int, private val initialPosition: Int): Patch() {
+            lateinit var target: JumpTarget
+            override fun apply_patch(ba: ByteArray) {
+                val diff = target.bytecodeOffset - initialPosition
+                ba[bytecodeLocation + 0] = ((diff shr 8) and 0xff).toByte()
+                ba[bytecodeLocation + 1] = ((diff shr 0) and 0xff).toByte()
+            }
+        }
 
+        abstract val bytecodeLocation: Int
+        abstract fun apply_patch(ba: ByteArray)
+    }
+
+    private var lastStackMapOffset = 0
     private val stackMapFrames = mutableListOf<Attribute.StackMapTable.StackMapFrame>()
 
     private fun pushStack(t: VerificationType) {
-        stack.add(t)
+        stack = stack + listOf(t)
         max_stack = max(max_stack, stack.size)
     }
     private fun popStack(expected: VerificationType) {
-        val t = stack.removeAt(stack.size - 1)
+        val t = stack.last()
+        stack = stack.dropLast(1)
         assert(t == expected) { "Popped $t, expected $expected" }
     }
 
@@ -47,7 +69,7 @@ class BytecodeBuilder(private val classFileBuilder: ClassFileBuilder) {
 
     fun reserveVariable(t: Type): Int {
         val vt = classFileBuilder.getVerificationType(t)
-        locals.add(vt ?: throw Exception("No reserving variables for zero-sized types: $t"))
+        locals = locals + listOf(vt ?: throw Exception("No reserving variables for zero-sized types: $t"))
         max_locals = max(max_locals, locals.size)
         return locals.size - 1
     }
@@ -137,10 +159,32 @@ class BytecodeBuilder(private val classFileBuilder: ClassFileBuilder) {
         popStack(t)
     }
 
-    fun enterScope(fn: () -> Unit) {
+    fun enterScope(yieldType: Type, fn: () -> Unit) {
         val old_locals = locals
+        val old_stack = stack
         fn()
+        if (yieldType == unit_type()) {
+            assert(stack == old_stack)
+        } else {
+            val vt = classFileBuilder.getVerificationType(yieldType)!!
+            assert(old_stack + listOf(vt) == stack)
+        }
         locals = old_locals
+    }
+
+    fun <T> emitBranch(yieldType: VerificationType?, fallthrough: Boolean, fn: () -> T): T {
+        val old_locals = locals
+        val old_stack = stack
+        val r = fn()
+        if (yieldType == null) {
+            assert(stack == old_stack)
+        } else {
+            assert(old_stack + listOf(yieldType) == stack)
+            if (!fallthrough)
+                stack = old_stack
+        }
+        locals = old_locals
+        return r
     }
 
     fun pushInt(num: Int) {
@@ -161,31 +205,62 @@ class BytecodeBuilder(private val classFileBuilder: ClassFileBuilder) {
     fun patchable_short(): Patch {
         val now = position()
         immediate_short(0) // patched out afterwards
-        val patch = Patch(now, 0)
+        val patch = Patch.ShortPatch(now, 0)
         patches += patch
         return patch
     }
 
-    fun branch_infeq_i32(yieldType: JVMComputationalType?, ifTrue: () -> Unit, ifFalse: () -> Unit) {
+    fun patchable_jump(jumpInstructionLocation: Int): Patch.JumpTargetPatch {
+        val now = position()
+        immediate_short(0) // patched out afterwards
+        val patch = Patch.JumpTargetPatch(now, jumpInstructionLocation)
+        patches += patch
+        return patch
+    }
+
+    private fun newJumpTarget(): JumpTarget {
+        val pos = position()
+        assert(pos > lastStackMapOffset)
+        val offset = pos - lastStackMapOffset
+        val frame = Attribute.StackMapTable.StackMapFrame.FullFrame(offset, locals, stack)
+        stackMapFrames += frame
+        lastStackMapOffset = pos + 1
+        return JumpTarget(pos)
+    }
+
+    private fun goto(): Patch.JumpTargetPatch {
+        val before_goto = position()
+        instruction(JVMInstruction.goto)
+        return patchable_jump(before_goto)
+    }
+
+    private fun branch(): Patch.JumpTargetPatch {
+        val before_goto = position()
+        instruction(JVMInstruction.if_icmple)
+        return patchable_jump(before_goto)
+    }
+
+    fun branch_infeq_i32(ifTrue: () -> Unit, ifFalse: () -> Unit) {
         popStack(VerificationType.Integer)
         popStack(VerificationType.Integer)
 
         val before_if = position()
         instruction(JVMInstruction.if_icmple)
-        val ifTrueJumpLocation = patchable_short()
-        ifFalse()
+        val ifTrueJumpLocation = patchable_jump(before_if)
 
-        // Goto statement after the "false" segment to join with the "true" section
-        val before_goto = position()
-        instruction(JVMInstruction.goto)
-        val ifFalseJoinGoto = patchable_short()
+        val ifFalseJoinGoto = emitBranch(VerificationType.Integer, fallthrough = false) {
+            ifFalse()
+            goto()
+        }
 
-        val ifTrueTarget = position()
-        ifTrue()
-        ifTrueJumpLocation.data = (ifTrueTarget - before_if).toShort()
+        emitBranch(VerificationType.Integer, fallthrough = true) {
+            val ifTrueTarget = newJumpTarget()
+            ifTrue()
+            ifTrueJumpLocation.target = ifTrueTarget
+        }
 
-        val joinTarget = position()
-        ifFalseJoinGoto.data = (joinTarget - before_goto).toShort()
+        val joinTarget = newJumpTarget()
+        ifFalseJoinGoto.target = joinTarget
     }
 
     fun pushDefaultValueType(className: String) {
@@ -355,15 +430,15 @@ class BytecodeBuilder(private val classFileBuilder: ClassFileBuilder) {
         dos.flush()
         val ba = baos___.toByteArray()
         for (patch in patches) {
-            ba[patch.pos + 0] = ((patch.data.toInt() shr 8) and 0xff).toByte()
-            ba[patch.pos + 1] = ((patch.data.toInt() shr 0) and 0xff).toByte()
+            patch.apply_patch(ba)
         }
-        val code = Attribute.Code(max_stack.toShort(), max_locals.toShort(), ba, emptyList(), emptyList())
-        val attributes = mutableListOf<Attribute>(code)
+        val codeAttributes = mutableListOf<AttributeInfo>()
         if (stackMapFrames.isNotEmpty()) {
             val stackMapTable = Attribute.StackMapTable(stackMapFrames)
-            attributes.add(stackMapTable)
+            codeAttributes.add(stackMapTable.wrap(classFileBuilder))
         }
+        val code = Attribute.Code(max_stack.toShort(), max_locals.toShort(), ba, emptyList(), codeAttributes)
+        val attributes = mutableListOf<Attribute>(code)
         return attributes
     }
 }

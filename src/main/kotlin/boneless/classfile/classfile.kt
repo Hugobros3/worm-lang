@@ -157,6 +157,8 @@ sealed class Attribute {
             abstract val offset: Int
         }
     }
+
+    fun wrap(cfb: ClassFileBuilder) = AttributeInfo(cfb.constantUTF(this.serializedName), interpreted = this, uninterpreted = null)
 }
 
 fun ClassFile.dump() {
