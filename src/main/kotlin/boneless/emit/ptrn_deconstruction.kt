@@ -1,11 +1,11 @@
 package boneless.emit
 
 import boneless.Pattern
-import boneless.classfile.BytecodeBuilder
+import boneless.classfile.BasicBlockBuilder
 import boneless.type.Type
 import boneless.type.unit_type
 
-typealias PutOnStack = (BytecodeBuilder) -> Unit
+typealias PutOnStack = (BasicBlockBuilder) -> Unit
 
 fun Emitter.registerPattern(map: MutableMap<Pattern, PutOnStack>, pattern: Pattern, procedure: PutOnStack) {
     map[pattern] = procedure

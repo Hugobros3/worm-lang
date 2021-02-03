@@ -95,26 +95,32 @@ fun Emitter.emit_datatype_classfile_if_needed(type: Type) {
                 }
 
                 val initDescriptor = getTupleInitializationMethodDescriptor(type)
-                val initCodeBuilder = BytecodeBuilder(builder)
-                val params = type.elements.mapIndexed { i, t ->
+
+                var j = 0
+                val params = mutableListOf<VerificationType>()
+                val params_vars = type.elements.mapIndexed { i, t ->
                     val fd = getFieldDescriptor(t)
                     if (fd != null) {
-                        initCodeBuilder.reserveVariable(t)
+                        params.add(builder.getVerificationType(fd))
+                        j++
                     } else null
                 }
 
+                val functionEmitter = FunctionEmitter(this, builder, params)
+                val bb = functionEmitter.bb
+
                 val mangled_dt = mangled_datatype_name(type)
-                initCodeBuilder.pushDefaultValueType(mangled_dt)
+                bb.pushDefaultValueType(mangled_dt)
                 for ((i, elementType) in type.elements.withIndex()) {
                     if (elementType == unit_type())
                         continue
-                    initCodeBuilder.loadVariable(params[i]!!)
+                    bb.loadVariable(params_vars[i]!!)
                     val fieldName = "_$i"
-                    initCodeBuilder.mutateSetFieldName(mangled_dt, fieldName, elementType, type)
+                    bb.mutateSetFieldName(mangled_dt, fieldName, elementType, type)
                 }
-                initCodeBuilder.return_value(type)
+                bb.return_value(type)
 
-                val attributes = initCodeBuilder.finish()
+                val attributes = functionEmitter.finish()
                 builder.method("<init>", initDescriptor, defaulMethodAccessFlags.copy(acc_static = true, acc_public = true), attributes)
                 builder.finish()
             }

@@ -7,7 +7,6 @@ import boneless.classfile.*
 import boneless.core.prelude_modules
 import boneless.type.PrimitiveTypeEnum
 import boneless.type.Type
-import boneless.type.unit_type
 import boneless.util.prettyPrint
 import java.io.File
 
@@ -52,7 +51,7 @@ class Emitter(val modules: List<Module>, val outputDir: File) {
                 val descriptor = getMethodDescriptor(fnt)
                 when (d) {
                     is Expression.Function -> {
-                        val attributes = FunctionEmitter(this, d, builder).emit()
+                        val attributes = FunctionEmitter(this, builder, d).emit(d)
                         builder.method(f, descriptor, defaulMethodAccessFlags.copy(acc_final = true, acc_static = true), attributes)
                     }
                     is Expression.IdentifierRef -> when(val r = d.id.resolved) {
@@ -61,7 +60,7 @@ class Emitter(val modules: List<Module>, val outputDir: File) {
                         is TermLocation.BuiltinFnRef -> {
                             val wrapper = fn_wrapper(d)
                             println(wrapper.prettyPrint())
-                            val attributes = FunctionEmitter(this, wrapper, builder).emit()
+                            val attributes = FunctionEmitter(this, builder, wrapper).emit(wrapper)
                             builder.method(f, descriptor, defaulMethodAccessFlags.copy(acc_final = true, acc_static = true), attributes)
                         }
                         is TermLocation.TypeParamRef -> TODO()
@@ -83,7 +82,7 @@ class Emitter(val modules: List<Module>, val outputDir: File) {
                 is Def.DefBody.DataCtor -> TODO()
                 is Def.DefBody.FnBody -> {
                     val descriptor = getMethodDescriptor(def.type as Type.FnType)
-                    val attributes = FunctionEmitter(this, def.body.fn, builder).emit()
+                    val attributes = FunctionEmitter(this, builder, def.body.fn).emit(def.body.fn)
                     builder.method(def.identifier, descriptor, defaulMethodAccessFlags.copy(acc_final = true, acc_static = true), attributes)
                 }
                 is Def.DefBody.TypeAlias -> {
@@ -97,7 +96,7 @@ class Emitter(val modules: List<Module>, val outputDir: File) {
         return builder.finish()
     }
 
-    internal fun emit_literal(builder: BytecodeBuilder, literal: Literal) {
+    internal fun emit_literal(builder: BasicBlockBuilder, literal: Literal) {
         when (literal) {
             is Literal.NumLiteral -> {
                 when((literal.type as Type.PrimitiveType).primitiveType) {

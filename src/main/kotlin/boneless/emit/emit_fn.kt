@@ -5,55 +5,65 @@ import boneless.Expression
 import boneless.Instruction
 import boneless.Pattern
 import boneless.bind.TermLocation
-import boneless.classfile.Attribute
-import boneless.classfile.BytecodeBuilder
-import boneless.classfile.ClassFileBuilder
+import boneless.classfile.*
 import boneless.type.Type
 import boneless.type.unit_type
 
-class FunctionEmitter(private val emitter: Emitter, val fn: Expression.Function, private val cfBuilder: ClassFileBuilder) {
-    val type = fn.type!! as Type.FnType
-    private val builder = BytecodeBuilder(cfBuilder)
-
-    //val parameter: Int
+class FunctionEmitter private constructor(private val emitter: Emitter, private val cfBuilder: ClassFileBuilder) {
+    lateinit var builder: MethodBuilder private set
     val patternsAccess = mutableListOf<Map<Pattern, PutOnStack>>()
 
-    init {
-        if (type.dom != unit_type()) {
-            val argument_local_var = builder.reserveVariable(type.dom)
-            val procedure: PutOnStack = {
-                builder.loadVariable(argument_local_var)
+    lateinit var bb: BasicBlockBuilder
+
+    constructor(emitter: Emitter, cfBuilder: ClassFileBuilder, fn: Expression.Function) : this(emitter, cfBuilder) {
+        var initialLocals = emptyList<VerificationType>()
+        val fnType = fn.type as Type.FnType
+        if (fnType.dom != unit_type()) {
+            initialLocals = listOf(cfBuilder.getVerificationType(fnType.dom)!!)
+
+            val procedure: PutOnStack = { bbb ->
+                bbb.loadVariable(0)
             }
             val m = mutableMapOf<Pattern, PutOnStack>()
             emitter.registerPattern(m, fn.param, procedure)
             patternsAccess += m
         }
-        // println(patternsAccess)
+
+        builder = MethodBuilder(cfBuilder, initialLocals)
+        bb = builder.initialBasicBlock
+    }
+
+    constructor(emitter: Emitter, cfBuilder: ClassFileBuilder, params: List<VerificationType>) : this(emitter, cfBuilder) {
+        builder = MethodBuilder(cfBuilder, params)
+        bb = builder.initialBasicBlock
     }
 
     fun accessPtrn(pattern: Pattern) {
         for (frame in patternsAccess) {
-            (frame[pattern] ?: continue).invoke(builder)
+            (frame[pattern] ?: continue).invoke(bb)
             return
         }
         throw Exception("$pattern is not accessible")
     }
 
-    fun emit(): List<Attribute> {
+    fun emit(fn: Expression.Function): List<Attribute> {
+        val fnType = fn.type as Type.FnType
         emit(fn.body)
         if (fn.body.type!! == unit_type()) {
-            builder.return_void()
+            bb.return_void()
         } else {
-            builder.return_value(type.codom)
+            bb.return_value(fnType.codom)
         }
 
         return builder.finish()
     }
 
-    private fun emit(expr: Expression) {
+    fun finish() = builder.finish()
+
+    fun emit(expr: Expression) {
         emitter.emit_datatype_classfile_if_needed(expr.type!!)
         when (expr) {
-            is Expression.QuoteLiteral -> emitter.emit_literal(builder, expr.literal)
+            is Expression.QuoteLiteral -> emitter.emit_literal(bb, expr.literal)
             is Expression.QuoteType -> TODO()
             is Expression.IdentifierRef -> when(val r = expr.id.resolved) {
                 is TermLocation.DefRef -> TODO()
@@ -70,7 +80,7 @@ class FunctionEmitter(private val emitter: Emitter, val fn: Expression.Function,
                         // the JVM's good reputation for being really good at optmizing away fn calls will save our bacon :)
                         for (element in expr.elements)
                             emit(element)
-                        builder.callStaticInternal(mangled_datatype_name(expr.type!!), "<init>", getTupleInitializationMethodDescriptor(type), cfBuilder.getVerificationType(type))
+                        bb.callStaticInternal(mangled_datatype_name(expr.type!!), "<init>", getTupleInitializationMethodDescriptor(type), cfBuilder.getVerificationType(type))
                     }
                     else -> throw Exception("cannot emit a list expression as a ${expr.type}")
                 }
@@ -83,7 +93,7 @@ class FunctionEmitter(private val emitter: Emitter, val fn: Expression.Function,
                         is TermLocation.BinderRef -> TODO()
                         is TermLocation.BuiltinFnRef -> {
                             emit(expr.arg)
-                            builder.callStatic("BuiltinFns", r.fn.name, r.fn.type)
+                            bb.callStatic("BuiltinFns", r.fn.name, r.fn.type)
                             return
                         }
                         is TermLocation.TypeParamRef -> TODO()
@@ -93,7 +103,7 @@ class FunctionEmitter(private val emitter: Emitter, val fn: Expression.Function,
                             val def = r.def
                             if (def.body is Def.DefBody.Contract) {
                                 emit(expr.arg)
-                                builder.callStatic(mangled_contract_instance_name(def.identifier, expr.callee.expression.deducedImplicitSpecializationArguments!!), expr.callee.id, expr.callee.type as Type.FnType)
+                                bb.callStatic(mangled_contract_instance_name(def.identifier, expr.callee.expression.deducedImplicitSpecializationArguments!!), expr.callee.id, expr.callee.type as Type.FnType)
                                 return
                             }
                         }
@@ -106,17 +116,38 @@ class FunctionEmitter(private val emitter: Emitter, val fn: Expression.Function,
             is Expression.Ascription -> TODO()
             is Expression.Cast -> TODO()
             is Expression.Sequence -> {
-                builder.enterScope(expr.type!!) {
-                    for (instruction in expr.instructions)
-                        emit(instruction)
-                    if (expr.yieldExpression != null)
-                        emit(expr.yieldExpression)
-                }
+                val prev = bb
+                val post_scope = builder.basicBlock(prev, "post_seq", additionalStack = listOf(cfBuilder.getVerificationType(expr.type!!)).filterNotNull() )
+                bb = builder.basicBlock(prev)
+                for (instruction in expr.instructions)
+                    emit(instruction)
+                if (expr.yieldExpression != null)
+                    emit(expr.yieldExpression)
+                prev.jump(bb)
+                bb.jump(post_scope)
+                bb = post_scope
             }
             is Expression.Conditional -> TODO()
             is Expression.WhileLoop -> TODO()
+            is Expression.ExprSpecialization -> TODO()
+            is Expression.Projection -> TODO()
+            else -> throw Exception("Unhandled expression ast node: $expr")
         }
     }
+
+    /*fun enterScope(yieldType: Type, fn: () -> Unit) {
+        val old_locals = bb.locals
+        val old_stack = bb.stack
+        val oldbb = bb
+        fn()
+        if (yieldType == unit_type()) {
+            assert(stack == old_stack)
+        } else {
+            val vt = classFileBuilder.getVerificationType(yieldType)!!
+            assert(old_stack + listOf(vt) == stack)
+        }
+        locals = old_locals
+    }*/
 
     fun emit_tuple(elements: List<Expression>) {
         TODO()
@@ -125,12 +156,12 @@ class FunctionEmitter(private val emitter: Emitter, val fn: Expression.Function,
     fun emit(instruction: Instruction) {
         when(instruction) {
             is Instruction.Let -> {
-                val argument_local_var = builder.reserveVariable(instruction.pattern.type!!)
+                val argument_local_var = bb.reserveVariable(instruction.pattern.type!!)
 
                 emit(instruction.body)
-                builder.setVariable(argument_local_var)
+                bb.setVariable(argument_local_var)
                 val procedure: PutOnStack = {
-                    builder.loadVariable(argument_local_var)
+                    bb.loadVariable(argument_local_var)
                 }
                 val m = mutableMapOf<Pattern, PutOnStack>()
                 emitter.registerPattern(m, instruction.pattern, procedure)
