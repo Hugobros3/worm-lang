@@ -147,21 +147,6 @@ sealed class Attribute {
         data class ExceptionTableEntry(val start_pc: Short, val end_pc: Short, val handler_pc: Short, val catch_type: Short)
     }
     data class StackMapTable(val entries: List<StackMapFrame>): Attribute() {
-        sealed class VerificationType {
-            object Top: VerificationType()
-            object Integer: VerificationType()
-            object Float: VerificationType()
-            object Null: VerificationType()
-            object UninitializedThis: VerificationType()
-            data class Object(val cpool_index: Int): VerificationType()
-            data class Uninitialized(val offset: Int): VerificationType()
-            object Long: VerificationType()
-            object Double: VerificationType()
-
-            override fun toString(): String {
-                return javaClass.simpleName
-            }
-        }
         sealed class StackMapFrame {
             data class SameFrame(override val offset: Int): StackMapFrame()
             data class SameLocals1StackItemFrame(override val offset: Int, val newStackElement: VerificationType): StackMapFrame()

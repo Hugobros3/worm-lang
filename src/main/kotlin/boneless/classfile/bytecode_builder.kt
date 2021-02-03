@@ -353,10 +353,10 @@ class BytecodeBuilder(private val classFileBuilder: ClassFileBuilder) {
 }
 
 fun JVMComputationalType.toVerifType() = when(this) {
-    CT_Int -> Attribute.StackMapTable.VerificationType.Integer
-    CT_Float -> Attribute.StackMapTable.VerificationType.Float
-    CT_Long -> Attribute.StackMapTable.VerificationType.Long
-    CT_Double -> Attribute.StackMapTable.VerificationType.Double
-    CT_Reference -> Attribute.StackMapTable.VerificationType.Object(TODO())
+    CT_Int -> VerificationType.Integer
+    CT_Float -> VerificationType.Float
+    CT_Long -> VerificationType.Long
+    CT_Double -> VerificationType.Double
+    CT_Reference -> VerificationType.Object(TODO())
     CT_ReturnAddress -> throw Exception("Disallowed")
 }

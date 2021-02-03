@@ -265,18 +265,18 @@ class ClassFileReader(val file: File) {
         }
     }
 
-    fun readVerificationType(): Attribute.StackMapTable.VerificationType {
+    fun readVerificationType(): VerificationType {
         val tag = readByte().toInt()
         return when (tag) {
-            0 -> Attribute.StackMapTable.VerificationType.Top
-            1 -> Attribute.StackMapTable.VerificationType.Integer
-            2 -> Attribute.StackMapTable.VerificationType.Float
-            3 -> Attribute.StackMapTable.VerificationType.Double
-            4 -> Attribute.StackMapTable.VerificationType.Long
-            5 -> Attribute.StackMapTable.VerificationType.Null
-            6 -> Attribute.StackMapTable.VerificationType.UninitializedThis
-            7 -> Attribute.StackMapTable.VerificationType.Object(readShort().toInt() and 0xFFFF)
-            8 -> Attribute.StackMapTable.VerificationType.Uninitialized(readShort().toInt() and 0xFFFF)
+            0 -> VerificationType.Top
+            1 -> VerificationType.Integer
+            2 -> VerificationType.Float
+            3 -> VerificationType.Double
+            4 -> VerificationType.Long
+            5 -> VerificationType.Null
+            6 -> VerificationType.UninitializedThis
+            7 -> VerificationType.Object(readShort().toInt() and 0xFFFF)
+            8 -> VerificationType.Uninitialized(readShort().toInt() and 0xFFFF)
             else -> throw Exception("Unhandled verif type tag $tag")
         }
     }

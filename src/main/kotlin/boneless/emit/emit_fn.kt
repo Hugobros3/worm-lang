@@ -53,7 +53,7 @@ class FunctionEmitter(private val emitter: Emitter, val fn: Expression.Function,
     private fun emit(expr: Expression) {
         emitter.emit_datatype_classfile_if_needed(expr.type!!)
         when (expr) {
-            is Expression.QuoteLiteral -> emitter.emit(builder, expr.literal)
+            is Expression.QuoteLiteral -> emitter.emit_literal(builder, expr.literal)
             is Expression.QuoteType -> TODO()
             is Expression.IdentifierRef -> when(val r = expr.id.resolved) {
                 is TermLocation.DefRef -> TODO()

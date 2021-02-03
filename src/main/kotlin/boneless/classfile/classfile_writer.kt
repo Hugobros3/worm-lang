@@ -295,18 +295,18 @@ fun writeAttributeBody(dos: DataOutputStream, a: Attribute) {
     }
 }
 
-fun writeVerificationType(dos: DataOutputStream, verificationType: Attribute.StackMapTable.VerificationType) {
+fun writeVerificationType(dos: DataOutputStream, verificationType: VerificationType) {
     var short = -1
     val tag = when (verificationType) {
-        is Attribute.StackMapTable.VerificationType.Top -> 0
-        is Attribute.StackMapTable.VerificationType.Integer -> 1
-        is Attribute.StackMapTable.VerificationType.Float -> 2
-        is Attribute.StackMapTable.VerificationType.Double -> 3
-        is Attribute.StackMapTable.VerificationType.Long -> 4
-        is Attribute.StackMapTable.VerificationType.Null -> 5
-        is Attribute.StackMapTable.VerificationType.UninitializedThis -> 6
-        is Attribute.StackMapTable.VerificationType.Object -> {short = verificationType.cpool_index ; 7}
-        is Attribute.StackMapTable.VerificationType.Uninitialized -> { short = verificationType.offset ; 8}
+        is VerificationType.Top -> 0
+        is VerificationType.Integer -> 1
+        is VerificationType.Float -> 2
+        is VerificationType.Double -> 3
+        is VerificationType.Long -> 4
+        is VerificationType.Null -> 5
+        is VerificationType.UninitializedThis -> 6
+        is VerificationType.Object -> {short = verificationType.cpool_index ; 7}
+        is VerificationType.Uninitialized -> { short = verificationType.offset ; 8}
         else -> throw Exception("Unhandled verif type tag $verificationType")
     }
     dos.writeByte(tag)

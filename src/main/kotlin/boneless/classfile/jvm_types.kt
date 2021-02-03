@@ -81,3 +81,19 @@ enum class JVMActualType(val asComputationalType: JVMComputationalType, val cat:
     AT_Reference(CT_Reference, 1),
     AT_ReturnAddress(CT_ReturnAddress, 1)
 }
+
+sealed class VerificationType {
+    object Top: VerificationType()
+    object Integer: VerificationType()
+    object Float: VerificationType()
+    object Null: VerificationType()
+    object UninitializedThis: VerificationType()
+    data class Object(val cpool_index: Int): VerificationType()
+    data class Uninitialized(val offset: Int): VerificationType()
+    object Long: VerificationType()
+    object Double: VerificationType()
+
+    override fun toString(): String {
+        return javaClass.simpleName
+    }
+}
