@@ -248,7 +248,70 @@ fun writeAttributeBody(dos: DataOutputStream, a: Attribute) {
 
             writeAttributes(dos, a.attributes)
         }
+        is Attribute.StackMapTable -> {
+            dos.writeShort(a.entries.size)
+            for (entry in a.entries) {
+                when (entry) {
+                    is Attribute.StackMapTable.StackMapFrame.SameFrame -> {
+                        if (entry.offset in 0..63) {
+                            dos.writeByte(entry.offset)
+                        } else {
+                            dos.writeByte(251)
+                            dos.writeShort(entry.offset)
+                        }
+                    }
+                    is Attribute.StackMapTable.StackMapFrame.SameLocals1StackItemFrame -> {
+                        if (entry.offset in 0..63) {
+                            dos.writeByte(entry.offset + 64)
+                            writeVerificationType(dos, entry.newStackElement)
+                        } else {
+                            dos.writeByte(247)
+                            dos.writeShort(entry.offset)
+                            writeVerificationType(dos, entry.newStackElement)
+                        }
+                    }
+                    is Attribute.StackMapTable.StackMapFrame.ChopFrame -> {
+                        dos.writeByte(251 - entry.k)
+                        dos.writeShort(entry.offset)
+                    }
+                    is Attribute.StackMapTable.StackMapFrame.AppendFrame -> {
+                        assert(entry.newLocals.size <= 3)
+                        dos.writeByte(251 + entry.newLocals.size)
+                        dos.writeShort(entry.offset)
+                        entry.newLocals.forEach { writeVerificationType(dos, it) }
+                    }
+                    is Attribute.StackMapTable.StackMapFrame.FullFrame -> {
+                        dos.writeByte(255)
+                        dos.writeShort(entry.offset)
+                        dos.writeShort(entry.locals.size)
+                        entry.locals.forEach { writeVerificationType(dos, it) }
+                        dos.writeShort(entry.stack.size)
+                        entry.stack.forEach { writeVerificationType(dos, it) }
+                    }
+                }
+            }
+        }
+        else -> throw Exception("Unhandled attribute $a")
     }
+}
+
+fun writeVerificationType(dos: DataOutputStream, verificationType: Attribute.StackMapTable.VerificationType) {
+    var short = -1
+    val tag = when (verificationType) {
+        is Attribute.StackMapTable.VerificationType.Top -> 0
+        is Attribute.StackMapTable.VerificationType.Integer -> 1
+        is Attribute.StackMapTable.VerificationType.Float -> 2
+        is Attribute.StackMapTable.VerificationType.Double -> 3
+        is Attribute.StackMapTable.VerificationType.Long -> 4
+        is Attribute.StackMapTable.VerificationType.Null -> 5
+        is Attribute.StackMapTable.VerificationType.UninitializedThis -> 6
+        is Attribute.StackMapTable.VerificationType.Object -> {short = verificationType.cpool_index ; 7}
+        is Attribute.StackMapTable.VerificationType.Uninitialized -> { short = verificationType.offset ; 8}
+        else -> throw Exception("Unhandled verif type tag $verificationType")
+    }
+    dos.writeByte(tag)
+    if (short != -1)
+        dos.writeShort(short)
 }
 
 fun writeClassFile(classFile: ClassFile, outputStream: DataOutputStream) =

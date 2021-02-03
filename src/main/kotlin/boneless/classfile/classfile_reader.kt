@@ -208,12 +208,77 @@ class ClassFileReader(val file: File) {
                 val attributes = readAttributes(cp)
                 Attribute.Code(max_stack, max_locals, code, exceptions, attributes)
             }
+            "StackMapTable" -> {
+                val entriesCount = readShort().toInt()
+
+                val frames = readN(entriesCount) { readStackMapFrame() }
+                Attribute.StackMapTable(frames)
+            }
             else -> {
                 info = readBytes(attribute_length)
                 null
             }
         }
         return AttributeInfo(attribute_name_index, info, interp)
+    }
+
+    fun readStackMapFrame(): Attribute.StackMapTable.StackMapFrame {
+        val frame_type = readByte().toInt() and 0xff
+        return when {
+            frame_type in 0..63 -> {
+                val offset = frame_type
+                Attribute.StackMapTable.StackMapFrame.SameFrame(offset)
+            }
+            frame_type in 64..127 -> {
+                val offset = (frame_type - 64)
+                Attribute.StackMapTable.StackMapFrame.SameLocals1StackItemFrame(offset, readVerificationType())
+            }
+            frame_type == 247 -> {
+                val offset = readShort().toInt()
+                Attribute.StackMapTable.StackMapFrame.SameLocals1StackItemFrame(offset, readVerificationType())
+            }
+            frame_type in 248..250 -> {
+                val k = 251 - frame_type
+                val offset = readShort().toInt()
+                Attribute.StackMapTable.StackMapFrame.ChopFrame(offset, k)
+            }
+            frame_type == 251 -> {
+                val offset = readShort().toInt()
+                Attribute.StackMapTable.StackMapFrame.SameFrame(offset)
+            }
+            frame_type in 252..254 -> {
+                val k = frame_type - 251
+                val offset = readShort().toInt()
+                val locals = readN(k) { readVerificationType() }
+                Attribute.StackMapTable.StackMapFrame.AppendFrame(offset, locals)
+            }
+            frame_type == 255 -> {
+                val offset = readShort().toInt()
+                val localsCount = readShort().toInt()
+                val locals = readN(localsCount) { readVerificationType() }
+                val stackCount = readShort().toInt()
+                val stack = readN(stackCount) { readVerificationType() }
+                Attribute.StackMapTable.StackMapFrame.FullFrame(offset, locals, stack)
+            }
+
+            else -> throw Exception("Unknown frame type: $frame_type")
+        }
+    }
+
+    fun readVerificationType(): Attribute.StackMapTable.VerificationType {
+        val tag = readByte().toInt()
+        return when (tag) {
+            0 -> Attribute.StackMapTable.VerificationType.Top
+            1 -> Attribute.StackMapTable.VerificationType.Integer
+            2 -> Attribute.StackMapTable.VerificationType.Float
+            3 -> Attribute.StackMapTable.VerificationType.Double
+            4 -> Attribute.StackMapTable.VerificationType.Long
+            5 -> Attribute.StackMapTable.VerificationType.Null
+            6 -> Attribute.StackMapTable.VerificationType.UninitializedThis
+            7 -> Attribute.StackMapTable.VerificationType.Object(readShort().toInt() and 0xFFFF)
+            8 -> Attribute.StackMapTable.VerificationType.Uninitialized(readShort().toInt() and 0xFFFF)
+            else -> throw Exception("Unhandled verif type tag $tag")
+        }
     }
 }
 
