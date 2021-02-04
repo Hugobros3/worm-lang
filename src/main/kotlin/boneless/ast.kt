@@ -10,14 +10,14 @@ import boneless.type.typeable
 typealias Identifier = String
 
 data class Module(val name: Identifier, val defs: Set<Def>)
-data class Def(val identifier: Identifier, val body: DefBody, val typeParamsNames: List<Identifier>) : Typeable by typeable() {
+data class Def(val identifier: Identifier, val body: DefBody, val typeParamsNames: List<Identifier>, internal var module_: String = "") : Typeable by typeable() {
     sealed class DefBody {
         data class ExprBody(val expr: Expression, val annotatedType: TypeExpr?): DefBody()
         data class DataCtor(val datatype: TypeExpr): DefBody() {
             // Created by type-checker
             lateinit var nominalType: Type.NominalType
         }
-        data class FnBody(val fn: Expression.Function): DefBody()
+        data class FnBody(val fn: Expression.Function, val annotatedType: TypeExpr?): DefBody()
         data class TypeAlias(val aliasedType: TypeExpr): DefBody()
 
         data class Contract(val payload: TypeExpr) : DefBody()

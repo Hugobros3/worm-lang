@@ -38,8 +38,8 @@ fun typeable() = object : Typeable {
 
 class TypeChecker(val module: Module) {
     val stack = mutableListOf<Frame>()
-
     class Frame(val def: Def)
+    val assumptions = mutableMapOf<Def, Type>()
 
     private fun cannot_infer(node: Typeable): Nothing {
         throw Exception("Cannot infer $node")
@@ -63,6 +63,10 @@ class TypeChecker(val module: Module) {
 
     fun expect(type: Type, expected_type: Type) {
         if (type != expected_type)
+            throw Exception("Expected $expected_type but got $type")
+    }
+    fun expect_subtype(type: Type, expected_type: Type) {
+        if (!isSubtype(type, expected_type))
             throw Exception("Expected $expected_type but got $type")
     }
 
@@ -128,7 +132,18 @@ class TypeChecker(val module: Module) {
                 )
             }
             is Def.DefBody.TypeAlias -> resolveTypeExpression(body.aliasedType)
-            is Def.DefBody.FnBody -> infer(body.fn)
+            is Def.DefBody.FnBody -> {
+                if (body.annotatedType == null)
+                    infer(body.fn)
+                else {
+                    val resolved = resolveTypeExpression(body.annotatedType)
+                    assumptions[def] = resolved
+                    val inferred = infer(body.fn) as Type.FnType
+                    assumptions.remove(def)
+                    expect(inferred.codom, resolved)
+                    inferred
+                }
+            }
             is Def.DefBody.Contract -> resolveTypeExpression(body.payload)
             is Def.DefBody.Instance -> {
                 val contract_def = get_def(body.contractId.resolved)
@@ -211,7 +226,19 @@ class TypeChecker(val module: Module) {
                         throw Exception("invocation callee is not a function $targetType")
                     targetType.codom
                 } else {
-                    val targetType = infer(expr.callee)
+                    var suggestedType: Type.FnType? = null
+                    if (expr.callee is Expression.IdentifierRef) {
+                        val def = get_def(expr.callee.id.resolved)
+                        val body = def?.body
+                        val assumedRet = assumptions[def]
+                        if (body is Def.DefBody.FnBody && assumedRet != null) {
+                            val completeType = Type.FnType(body.fn.param.type!!, assumedRet)
+                            expr.callee.set_type(completeType)
+                            suggestedType = completeType
+                        }
+                    }
+
+                    val targetType = suggestedType ?: infer(expr.callee)
                     if (targetType !is Type.FnType)
                         throw Exception("invocation callee is not a function $targetType")
 
@@ -220,7 +247,7 @@ class TypeChecker(val module: Module) {
                     }
 
                     val argsType = infer(expr.arg)
-                    expect(argsType, targetType.dom)
+                    expect_subtype(argsType, targetType.dom)
                     targetType.codom
                 }
             }
@@ -367,7 +394,14 @@ class TypeChecker(val module: Module) {
                 } else
                     check(expr.yieldExpression, expected_type)
             }
-            is Expression.Conditional -> TODO()
+            is Expression.Conditional -> {
+                check(expr.condition, Type.PrimitiveType(PrimitiveTypeEnum.Bool))
+                val left = infer(expr.ifTrue)
+                val right = infer(expr.ifFalse)
+                expect(left, right)
+                expect(left, expected_type)
+                expected_type
+            }
             is Expression.WhileLoop -> TODO()
         }
     }
@@ -489,8 +523,10 @@ class TypeChecker(val module: Module) {
             }
             is Pattern.TypeAnnotatedPattern -> {
                 // test me
-                expect(resolveTypeExpression(pattern.annotatedType), expected_type);
-                check(pattern.pattern, expected_type)
+                val actualType = resolveTypeExpression(pattern.annotatedType)
+                expect_subtype(actualType, expected_type)
+                check(pattern.pattern, actualType)
+                actualType
             }
         }
     }

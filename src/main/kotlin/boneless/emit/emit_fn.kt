@@ -89,7 +89,15 @@ class FunctionEmitter private constructor(private val emitter: Emitter, private 
             is Expression.Invocation -> {
                 when {
                     expr.callee is Expression.IdentifierRef -> when (val r = expr.callee.id.resolved) {
-                        is TermLocation.DefRef -> TODO()
+                        is TermLocation.DefRef -> {
+                            if (r.def.body is Def.DefBody.FnBody) {
+                                // TODO specialization garbage
+                                assert(r.def.typeParams.isEmpty())
+                                emit(expr.arg)
+                                bb.callStatic(r.def.module_, r.def.identifier, expr.callee.type as Type.FnType)
+                                return
+                            } else throw Exception("Can't call that def")
+                        }
                         is TermLocation.BinderRef -> TODO()
                         is TermLocation.BuiltinFnRef -> {
                             emit(expr.arg)
@@ -117,17 +125,35 @@ class FunctionEmitter private constructor(private val emitter: Emitter, private 
             is Expression.Cast -> TODO()
             is Expression.Sequence -> {
                 val prev = bb
-                val post_scope = builder.basicBlock(prev, "post_seq", additionalStack = listOf(cfBuilder.getVerificationType(expr.type!!)).filterNotNull() )
-                bb = builder.basicBlock(prev)
+                val after_seq = builder.basicBlock(prev, "after_seq", additionalStack = listOf(cfBuilder.getVerificationType(expr.type!!)).filterNotNull() )
+                val inside_seq = builder.basicBlock(prev, "inside_seq")
+                prev.jump(inside_seq)
+                bb = inside_seq
                 for (instruction in expr.instructions)
                     emit(instruction)
                 if (expr.yieldExpression != null)
                     emit(expr.yieldExpression)
-                prev.jump(bb)
-                bb.jump(post_scope)
-                bb = post_scope
+                bb.jump(after_seq)
+                bb = after_seq
             }
-            is Expression.Conditional -> TODO()
+            is Expression.Conditional -> {
+                val yieldType = expr.type!!
+                val additionalStack = listOf(cfBuilder.getVerificationType(yieldType)).filterNotNull()
+                val ifTrueBB = builder.basicBlock(bb, bbName = "ifTrue")
+                val ifFalseBB = builder.basicBlock(bb, bbName = "ifFalse")
+                val joinBB = builder.basicBlock(bb, additionalStack = additionalStack, bbName = "join")
+                emit(expr.condition)
+                bb.branch(BranchType.BOOL, ifTrueBB, ifFalseBB)
+
+                bb = ifTrueBB
+                emit(expr.ifTrue)
+                ifTrueBB.jump(joinBB)
+
+                bb = ifFalseBB
+                emit(expr.ifFalse)
+                ifFalseBB.jump(joinBB)
+                bb = joinBB
+            }
             is Expression.WhileLoop -> TODO()
             is Expression.ExprSpecialization -> TODO()
             is Expression.Projection -> TODO()

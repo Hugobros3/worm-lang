@@ -10,6 +10,7 @@ data class BasicBlock(
 )
 
 enum class BranchType {
+    BOOL,
     ICMP_LESS_EQUAL
 }
 

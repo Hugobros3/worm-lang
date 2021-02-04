@@ -179,6 +179,8 @@ class MethodBuilder(private val classFileBuilder: ClassFileBuilder, initialLocal
         val before_goto = position()
         when (mode) {
             BranchType.ICMP_LESS_EQUAL -> instruction(JVMInstruction.if_icmple)
+            BranchType.BOOL -> instruction(JVMInstruction.ifne)
+            else -> throw Exception()
         }
         return patchable_jump(before_goto)
     }
@@ -508,10 +510,14 @@ class BasicBlockBuilder internal constructor(
     }
 
     fun jump(target: BasicBlockBuilder) {
+        if (succ != null)
+            throw Exception("Can't set successor twice")
         succ = BBBSucc.Jump(target)
     }
 
     fun branch(mode: BranchType, ifTrue: BasicBlockBuilder, ifFalse: BasicBlockBuilder) {
+        if (succ != null)
+            throw Exception("Can't set successor twice")
         succ = BBBSucc.Branch(mode, ifTrue, ifFalse)
     }
 

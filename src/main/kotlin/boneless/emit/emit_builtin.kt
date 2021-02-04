@@ -118,19 +118,6 @@ fun Emitter.emit_builtin_fn_classfile(): ClassFile {
                 fnEmitter.bb.return_value(builtin.type.codom)
             }
             BuiltinFn.jvm_infeq_i32 -> {
-                /*val ifTrueBB = fnEmitter.builder.basicBlock(fnEmitter.bb)
-                val ifFalseBB = fnEmitter.builder.basicBlock(fnEmitter.bb)
-                val joinBB = fnEmitter.builder.basicBlock(fnEmitter.bb, additionalStack = listOf(VerificationType.Integer))
-                access_arg_extract(0)
-                access_arg_extract(1)
-
-                ifTrueBB.pushInt(1)
-                ifFalseBB.pushInt(0)
-                fnEmitter.bb.branch(BranchType.ICMP_LESS_EQUAL, ifTrueBB, ifFalseBB)
-                ifTrueBB.jump(joinBB)
-                ifFalseBB.jump(joinBB)
-                fnEmitter.bb = joinBB
-                fnEmitter.bb.return_value(builtin.type.codom)*/
                 val ifTrueBB = fnEmitter.builder.basicBlock(fnEmitter.bb)
                 val ifFalseBB = fnEmitter.builder.basicBlock(fnEmitter.bb)
                 access_arg_extract(0)

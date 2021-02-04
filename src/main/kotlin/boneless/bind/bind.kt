@@ -70,12 +70,14 @@ class BindHelper(private val module: Module) {
         if (!module.name.startsWith("Prelude"))
             for (prelude_mod in prelude_modules) {
                 for (def in prelude_mod.defs) {
+                    def.module_ = prelude_mod.name
                     if (def.body !is Def.DefBody.Instance)
                         this[def.identifier] = TermLocation.DefRef(def)
                 }
             }
 
         for (def in module.defs) {
+            def.module_ = module.name
             if (def.body !is Def.DefBody.Instance)
                 this[def.identifier] = TermLocation.DefRef(def)
         }

@@ -168,11 +168,10 @@ class Parser(private val inputAsText: String, private val tokens: List<Tokenizer
                     !lhs.isRefutable -> Expression.Function(
                         lhs,
                         rhs,
-                        returnTypeAnnotation = returnTypeAnnotation
                     )
                     else -> expected("Expected non-refutable pattern")
                 }
-                val body = Def.DefBody.FnBody(fn)
+                val body = Def.DefBody.FnBody(fn, returnTypeAnnotation)
                 defs += Def(identifier, body, typeParams)
                 expect(";")
             } else if (accept("contract")) {

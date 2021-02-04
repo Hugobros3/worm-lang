@@ -135,8 +135,8 @@ class TestJVMCodegen {
     @Test
     fun testFactorial() {
         val mod = module("TestFactorial","""
-            fn fac(n: I32) => {
-                n <= 2
+            fn fac(n: I32) -> I32 = {
+                if n <= 1 then 1 else fac (n-1) * n
             };
         """.trimIndent())
 

@@ -13,6 +13,7 @@ The name is an unfunny private joke and literally nothing about it is set is sto
  * All datatypes are structural, until you make them nominal using `data`
  * Local type inference inside definitions and for return types
  * Targets the LW2 prototype from OpenJDK's project valhalla, to get proper value types support out of the JVM: this means types like `[I32, I32]` do not require heap allocations and instead work like primitive types.
+ * Uses basic blocks internally to encode control flow inside functions
  * Support for parametric polymorphism, including a contract system (in the same vein as Rust traits and Haskell typeclasses) and has basic type parameters inference
  * The built-in operators (`+`, `<=`, `^`, ...) use said contracts system, so they work on custom types too
  * The syntax makes a lot of effort to be not only easy to read, but *simple, full stop*. The need for heavy syntactic sugar is not present, the syntax was carefully studied to offer flexibility without sacrificing much verbosity or allowing ambiguity.
@@ -25,6 +26,12 @@ fn foo(a: I32, b: I32) => {
     else {
         a * (b - 1)
     }
+};
+```
+
+```haskell
+fn fac(n: I32) -> I32 = {
+    if n <= 1 then 1 else fac (n-1) * n
 };
 ```
 
