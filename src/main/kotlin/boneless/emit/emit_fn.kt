@@ -125,7 +125,7 @@ class FunctionEmitter private constructor(private val emitter: Emitter, private 
             is Expression.Cast -> TODO()
             is Expression.Sequence -> {
                 val prev = bb
-                val after_seq = builder.basicBlock(prev, "after_seq", additionalStack = listOf(cfBuilder.getVerificationType(expr.type!!)).filterNotNull() )
+                val after_seq = builder.basicBlock(prev, "after_seq", additionalStackInputs = listOf(cfBuilder.getVerificationType(expr.type!!)).filterNotNull() )
                 val inside_seq = builder.basicBlock(prev, "inside_seq")
                 prev.jump(inside_seq)
                 bb = inside_seq
@@ -141,7 +141,7 @@ class FunctionEmitter private constructor(private val emitter: Emitter, private 
                 val additionalStack = listOf(cfBuilder.getVerificationType(yieldType)).filterNotNull()
                 val ifTrueBB = builder.basicBlock(bb, bbName = "ifTrue")
                 val ifFalseBB = builder.basicBlock(bb, bbName = "ifFalse")
-                val joinBB = builder.basicBlock(bb, additionalStack = additionalStack, bbName = "join")
+                val joinBB = builder.basicBlock(bb, additionalStackInputs = additionalStack, bbName = "join")
                 emit(expr.condition)
                 bb.branch(BranchType.BOOL, ifTrueBB, ifFalseBB)
 

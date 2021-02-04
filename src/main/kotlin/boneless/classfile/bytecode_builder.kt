@@ -30,33 +30,27 @@ class MethodBuilder(private val classFileBuilder: ClassFileBuilder, initialLocal
     fun basicBlock(
         pre_locals: List<VerificationType>,
         pre_stack: List<VerificationType>,
-        bbName: String = "basicBlock${cnt++}"
+        bbName: String = "basicBlock"
     ): BasicBlockBuilder {
-        val bbb = BasicBlockBuilder(classFileBuilder, pre_locals, pre_stack, bbName)
+        var uniqueBBName = bbName
+        if (bbBuilders.find { it.bbName == bbName } != null) {
+            uniqueBBName = bbName + "${cnt++}"
+        }
+        val bbb = BasicBlockBuilder(classFileBuilder, pre_locals, pre_stack, uniqueBBName)
         bbBuilders += bbb
         return bbb
     }
 
     fun basicBlock(
         predecessor: BasicBlockBuilder,
-        bbName: String = "basicBlock${cnt++}",
-        additionalStack: List<VerificationType> = emptyList()
+        bbName: String = "basicBlock",
+        additionalStackInputs: List<VerificationType> = emptyList()
     ): BasicBlockBuilder {
-        val bbb = BasicBlockBuilder(classFileBuilder, predecessor.locals, predecessor.stack + additionalStack, bbName)
-        bbBuilders += bbb
-        return bbb
+        return basicBlock(predecessor.locals, predecessor.stack + additionalStackInputs, bbName)
     }
 
     private val patches = mutableListOf<Patch>()
-
     sealed class Patch {
-        class ShortPatch(override val bytecodeLocation: Int, var data: Short) : Patch() {
-            override fun apply_patch(ba: ByteArray) {
-                ba[bytecodeLocation + 0] = ((data.toInt() shr 8) and 0xff).toByte()
-                ba[bytecodeLocation + 1] = ((data.toInt() shr 0) and 0xff).toByte()
-            }
-        }
-
         class JumpTargetPatch(override val bytecodeLocation: Int, private val initialPosition: Int) : Patch() {
             lateinit var target: JumpTarget
             override fun apply_patch(ba: ByteArray) {
@@ -194,7 +188,7 @@ class BasicBlockBuilder internal constructor(
     private val classFileBuilder: ClassFileBuilder,
     internal val pre_locals: List<VerificationType>,
     internal val pre_stack: List<VerificationType>,
-    private val bbName: String) {
+    internal val bbName: String) {
 
     var locals: List<VerificationType> = pre_locals
     var stack: List<VerificationType> = pre_stack
@@ -211,10 +205,6 @@ class BasicBlockBuilder internal constructor(
     //internal var jump_target: JumpTarget?
     internal var is_jump_target = false
     internal val preds = mutableListOf<BasicBlock>()
-    /*
-
-    private var lastStackMapOffset = 0
-    private val stackMapFrames = mutableListOf<Attribute.StackMapTable.StackMapFrame>()*/
 
     private fun pushStack(t: VerificationType) {
         stack = stack + listOf(t)
