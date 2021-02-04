@@ -172,8 +172,17 @@ class MethodBuilder(private val classFileBuilder: ClassFileBuilder, initialLocal
     private fun branch(mode: BranchType): Patch.JumpTargetPatch {
         val before_goto = position()
         when (mode) {
+            BranchType.IF_GREATER_EQUAL -> instruction(JVMInstruction.ifge)
+            BranchType.IF_GREATER -> instruction(JVMInstruction.ifgt)
+            BranchType.IF_EQ -> instruction(JVMInstruction.ifeq)
+            BranchType.IF_NEQ -> instruction(JVMInstruction.ifne)
+
             BranchType.ICMP_LESS_EQUAL -> instruction(JVMInstruction.if_icmple)
-            BranchType.BOOL -> instruction(JVMInstruction.ifne)
+            BranchType.ICMP_LESS -> instruction(JVMInstruction.if_icmplt)
+            BranchType.ICMP_EQ -> instruction(JVMInstruction.if_icmpeq)
+            BranchType.ICMP_NEQ -> instruction(JVMInstruction.if_icmpne)
+            BranchType.ICMP_GREATER -> instruction(JVMInstruction.if_icmpgt)
+            BranchType.ICMP_GREATER_EQUAL -> instruction(JVMInstruction.if_icmpge)
             else -> throw Exception()
         }
         return patchable_jump(before_goto)
@@ -478,6 +487,20 @@ class BasicBlockBuilder internal constructor(
         popStack(VerificationType.Integer)
         instruction(JVMInstruction.ixor)
         pushStack(VerificationType.Integer)
+    }
+
+    fun fcmpl() {
+        popStack(VerificationType.Float)
+        popStack(VerificationType.Float)
+        instruction(JVMInstruction.fcmpl)
+        pushStack(VerificationType.Float)
+    }
+
+    fun fcmpg() {
+        popStack(VerificationType.Float)
+        popStack(VerificationType.Float)
+        instruction(JVMInstruction.fcmpg)
+        pushStack(VerificationType.Float)
     }
 
     fun return_void() {

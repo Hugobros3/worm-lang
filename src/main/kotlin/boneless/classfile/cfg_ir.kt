@@ -10,8 +10,17 @@ data class BasicBlock(
 )
 
 enum class BranchType {
-    BOOL,
-    ICMP_LESS_EQUAL
+    IF_GREATER_EQUAL,
+    IF_GREATER,
+    IF_EQ,
+    IF_NEQ,
+
+    ICMP_LESS_EQUAL,
+    ICMP_LESS,
+    ICMP_EQ,
+    ICMP_NEQ,
+    ICMP_GREATER,
+    ICMP_GREATER_EQUAL,
 }
 
 sealed class BBSuccessor {

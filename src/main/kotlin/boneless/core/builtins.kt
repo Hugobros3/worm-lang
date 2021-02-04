@@ -28,5 +28,17 @@ enum class BuiltinFn(val type: Type.FnType) {
     jvm_not_bool(Type.FnType(BoolT, BoolT)),
 
     jvm_infeq_i32(Type.FnType(Type.TupleType(listOf(I32T, I32T)), BoolT)),
+      jvm_inf_i32(Type.FnType(Type.TupleType(listOf(I32T, I32T)), BoolT)),
+       jvm_eq_i32(Type.FnType(Type.TupleType(listOf(I32T, I32T)), BoolT)),
+      jvm_neq_i32(Type.FnType(Type.TupleType(listOf(I32T, I32T)), BoolT)),
+      jvm_grt_i32(Type.FnType(Type.TupleType(listOf(I32T, I32T)), BoolT)),
+    jvm_grteq_i32(Type.FnType(Type.TupleType(listOf(I32T, I32T)), BoolT)),
+
+    jvm_infeq_f32(Type.FnType(Type.TupleType(listOf(F32T, F32T)), BoolT)),
+      jvm_inf_f32(Type.FnType(Type.TupleType(listOf(F32T, F32T)), BoolT)),
+       jvm_eq_f32(Type.FnType(Type.TupleType(listOf(F32T, F32T)), BoolT)),
+      jvm_neq_f32(Type.FnType(Type.TupleType(listOf(F32T, F32T)), BoolT)),
+      jvm_grt_f32(Type.FnType(Type.TupleType(listOf(F32T, F32T)), BoolT)),
+    jvm_grteq_f32(Type.FnType(Type.TupleType(listOf(F32T, F32T)), BoolT)),
     ;
 }

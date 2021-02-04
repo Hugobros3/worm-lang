@@ -52,6 +52,18 @@ forall T contract Grt = [ grt = fn [T, T] -> Bool ];
 forall T contract GrtEq = [ grteq = fn [T, T] -> Bool ];
 
 instance InfEq::I32 = ( infeq = jvm_infeq_i32 );
+instance   Inf::I32 = (   inf = jvm_inf_i32 );
+instance    Eq::I32 = (    eq = jvm_eq_i32 );
+instance   Neq::I32 = (   neq = jvm_neq_i32 );
+instance   Grt::I32 = (   grt = jvm_grt_i32 );
+instance GrtEq::I32 = ( grteq = jvm_grteq_i32 );
+
+instance InfEq::F32 = ( infeq = jvm_infeq_f32 );
+instance   Inf::F32 = (   inf = jvm_inf_f32 );
+instance    Eq::F32 = (    eq = jvm_eq_f32 );
+instance   Neq::F32 = (   neq = jvm_neq_f32 );
+instance   Grt::F32 = (   grt = jvm_grt_f32 );
+instance GrtEq::F32 = ( grteq = jvm_grteq_f32 );
 """.trimIndent()
 
 val prelude_cmp_module = createModule("Prelude_Cmp", prelude_cmp).also { bind(it) ; type(it) }

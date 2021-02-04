@@ -143,7 +143,7 @@ class FunctionEmitter private constructor(private val emitter: Emitter, private 
                 val ifFalseBB = builder.basicBlock(bb, bbName = "ifFalse")
                 val joinBB = builder.basicBlock(bb, additionalStackInputs = additionalStack, bbName = "join")
                 emit(expr.condition)
-                bb.branch(BranchType.BOOL, ifTrueBB, ifFalseBB)
+                bb.branch(BranchType.IF_NEQ, ifTrueBB, ifFalseBB)
 
                 bb = ifTrueBB
                 emit(expr.ifTrue)
