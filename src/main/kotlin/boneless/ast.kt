@@ -31,7 +31,7 @@ data class Def(val identifier: Identifier, val body: DefBody, val typeParamsName
 }
 
 sealed class Instruction {
-    data class Let(val pattern: Pattern, val body: Expression) : Instruction()
+    data class Let(val pattern: Pattern, val body: Expression, val mutable: Boolean) : Instruction()
     data class Evaluate(val expr: Expression) : Instruction()
 }
 

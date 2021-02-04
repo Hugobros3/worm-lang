@@ -20,6 +20,7 @@ enum class Keyword(val str: String) {
     Def("def"),
     Let("let"),
     Var("var"),
+    Mut("mut"),
     Fn("fn"),
     As("as"),
     Data("data"),
@@ -41,8 +42,9 @@ enum class Keyword(val str: String) {
     NotEq("!="),
     InfEq("<="),
     GreaterEq(">="),
+    Assign(":="),
 
-    Assign("="),
+    Bind("="),
     Inf("<"),
     Greater(">"),
     StatementEnd(";"),

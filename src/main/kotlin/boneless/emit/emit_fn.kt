@@ -161,24 +161,6 @@ class FunctionEmitter private constructor(private val emitter: Emitter, private 
         }
     }
 
-    /*fun enterScope(yieldType: Type, fn: () -> Unit) {
-        val old_locals = bb.locals
-        val old_stack = bb.stack
-        val oldbb = bb
-        fn()
-        if (yieldType == unit_type()) {
-            assert(stack == old_stack)
-        } else {
-            val vt = classFileBuilder.getVerificationType(yieldType)!!
-            assert(old_stack + listOf(vt) == stack)
-        }
-        locals = old_locals
-    }*/
-
-    fun emit_tuple(elements: List<Expression>) {
-        TODO()
-    }
-
     fun emit(instruction: Instruction) {
         when(instruction) {
             is Instruction.Let -> {

@@ -1,11 +1,13 @@
 package boneless
 
 import boneless.core.prelude_math
+import boneless.emit.emit
 import boneless.parse.Parser
 import boneless.parse.Tokenizer
 import boneless.util.prettyPrint
 import org.junit.Assert.assertTrue
 import org.junit.Test
+import java.io.File
 
 class TestParser {
 
@@ -223,6 +225,17 @@ class TestParser {
             data Pair = [first = T1, second = T2];
             
             fn sum_pair(p: Pair::(I32, I32)) => p.first + p.second;
+        """.trimIndent())
+    }
+
+    @Test
+    fun testMutable() {
+        testModule("""
+            fn f() => {
+                let mut x: I32 = 5;
+                x := 25 - x;
+                x
+            };
         """.trimIndent())
     }
 

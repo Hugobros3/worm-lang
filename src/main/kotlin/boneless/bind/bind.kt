@@ -17,7 +17,7 @@ data class BindPoint private constructor(val identifier: Identifier) {
 /** Contains information to locate the AST node referenced by an identifier */
 sealed class TermLocation {
     data class DefRef(val def: Def) : TermLocation()
-    data class BinderRef(val binder: Pattern.BinderPattern) : TermLocation()
+    data class BinderRef(val binder: Pattern.BinderPattern, val is_mutable: Boolean = false) : TermLocation()
     data class BuiltinFnRef(val fn: BuiltinFn) : TermLocation()
     data class TypeParamRef(val def: Def, val index: Int) : TermLocation() {
         override fun toString(): String {
