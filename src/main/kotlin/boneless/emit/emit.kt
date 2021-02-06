@@ -87,6 +87,9 @@ class Emitter(val modules: List<Module>, val outputDir: File) {
                 is Def.DefBody.ExprBody -> TODO()
                 is Def.DefBody.DataCtor -> TODO()
                 is Def.DefBody.FnBody -> {
+                    if (def.typeParamsNames.isNotEmpty())
+                        continue
+
                     var dump: Writer? = null
                     if (def.body.dump_dot) {
                         val file = File("test_out/debugviz/debug_graph_${def.module_}_${def.identifier}.dot")

@@ -16,6 +16,8 @@ fun isSubtype(T: Type, S: Type): Boolean {
         // A record type T is a subtype of another record type S iff the elements in T are a superset of the elements in S
         T is Type.RecordType && S is Type.RecordType && T.elements.containsAll(S.elements) -> true
 
+        T is Type.RecordType && S is Type.EnumType && T.elements.size == 1 && S.elements.find { it.first == T.elements[0].first }?.second?.let { isSubtype(T.elements[0].second, it) } ?: false -> true
+
         T is Type.FnType && S is Type.FnType && isSubtype(S.dom, T.dom) && isSubtype(T.codom, S.codom) -> true
         else -> false
     }

@@ -169,6 +169,7 @@ class Parser(private val inputAsText: String, private val tokens: List<Tokenizer
                     !lhs.isRefutable -> Expression.Function(
                         lhs,
                         rhs,
+                        returnTypeAnnotation
                     )
                     else -> expected("Expected non-refutable pattern")
                 }
@@ -208,6 +209,9 @@ class Parser(private val inputAsText: String, private val tokens: List<Tokenizer
             eat("->")
             val codom = expectType()
             return TypeExpr.FnType(dom, codom)
+        }
+        if (accept("Top")) {
+            return TypeExpr.Top
         }
 
         val calleeId = acceptIdentifier() ?: return eatTypeBrackets()
@@ -360,6 +364,7 @@ class Parser(private val inputAsText: String, private val tokens: List<Tokenizer
             }
             accept("true") -> return Expression.QuoteLiteral(Literal.BoolLiteral(true))
             accept("false") -> return Expression.QuoteLiteral(Literal.BoolLiteral(false))
+            accept("builtin_undef") -> return Expression.QuoteLiteral(Literal.Undef())
             accept("if") -> {
                 val condition = acceptExpression(0)!!
                 expect("then")

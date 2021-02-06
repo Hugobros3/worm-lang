@@ -94,7 +94,11 @@ class BindHelper(private val module: Module) {
             is Def.DefBody.ExprBody -> bind(def.body.expr)
             is Def.DefBody.DataCtor -> bind(def.body.datatype)
             is Def.DefBody.TypeAlias -> bind(def.body.aliasedType)
-            is Def.DefBody.FnBody -> bind(def.body.fn)
+            is Def.DefBody.FnBody -> {
+                bind(def.body.fn)
+                if(def.body.annotatedType != null)
+                    bind(def.body.annotatedType)
+            }
             is Def.DefBody.Contract -> bind(def.body.payload)
             is Def.DefBody.Instance -> {
                 def.body.contractId.resolved_ = this[def.body.contractId.identifier]
@@ -192,11 +196,11 @@ class BindHelper(private val module: Module) {
                 bind(type.target)
                 type.arguments.forEach(::bind)
             }
-            is TypeExpr.PrimitiveType -> {
-            }
             is TypeExpr.FnType -> {
                 bind(type.dom); bind(type.codom)
             }
+            is TypeExpr.PrimitiveType,
+            is TypeExpr.Top -> {}
             else -> throw Exception("Unhandled ast node $type")
         }
     }

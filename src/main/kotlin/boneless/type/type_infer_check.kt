@@ -7,14 +7,6 @@ import boneless.util.Visitors
 import boneless.util.prettyPrint
 import boneless.util.visitAST
 
-fun Type.normalize(): Type = when {
-    // tuples of size 1 do not exist
-    this is Type.TupleType && elements.size == 1 -> elements[0]
-    // definite arrays of size 1 do not exist
-    // this is Type.ArrayType && size == 1 -> elementType
-    else -> this
-}
-
 fun type(module: Module) {
     TypeChecker(module).type()
 }
@@ -71,17 +63,17 @@ class TypeChecker(val module: Module) {
     }
     fun expect_subtype(type: Type, expected_type: Type) {
         if (!isSubtype(type, expected_type))
-            throw Exception("Expected $expected_type but got $type")
+            type_error("Expected ${expected_type.prettyPrint()} but got ${type.prettyPrint()}")
     }
 
     fun coerce(expr: Expression, type: Type, expected_type: Type): Type {
         if (type == expected_type)
             return expected_type
         if (isSubtype(type, expected_type)) {
-            expr.deducedImplicitCast = expected_type
+            expr.implicitUpcast = expected_type
             return type
         } else
-            throw Exception("Expected $expected_type but got $type")
+            type_error("Expected ${expected_type.prettyPrint()} (or a subtype) but got ${type.prettyPrint()}")
     }
 
     fun infer(node: Typeable) = infer_(node, true)
@@ -89,7 +81,8 @@ class TypeChecker(val module: Module) {
 
     private fun infer_(node: Typeable, throwIfAlreadyTyped: Boolean): Type {
         if (node.is_typed_yet) {
-            if (throwIfAlreadyTyped) throw Exception("The type already exists!")
+            if (throwIfAlreadyTyped)
+                throw Exception("The type already exists!")
             else return node.type
         }
         val inferred = when (node) {
@@ -156,8 +149,7 @@ class TypeChecker(val module: Module) {
             is Def.DefBody.Contract -> resolveTypeExpression(body.payload)
             is Def.DefBody.Instance -> {
                 val contract_def = get_def(body.contractId.resolved)
-                contract_def?.body as? Def.DefBody.Contract
-                    ?: throw Exception("Instances must reference contract definitions")
+                contract_def?.body as? Def.DefBody.Contract ?: type_error("Instances must reference contract definitions")
                 val contract_type = infer_def_lazily(contract_def)
 
                 body.arguments = body.argumentsExpr.map { resolveTypeExpression(it) }
@@ -214,10 +206,7 @@ class TypeChecker(val module: Module) {
             is Expression.ListExpression -> {
                 val inferred = expr.elements.map { infer(it) }
                 assert(inferred.size > 1)
-                when {
-                    //inferred.isEmpty() -> unit_type()
-                    else -> Type.TupleType(inferred)
-                }
+                Type.TupleType(inferred)
             }
             is Expression.RecordExpression -> {
                 val inferred = expr.fields.map { (f, e) -> Pair(f, infer(e)) }
@@ -237,7 +226,7 @@ class TypeChecker(val module: Module) {
 
                             val dom = body.fn.param.type
                             val codom = resolveTypeExpression(body.annotatedType)
-                            expect(argType, dom)
+                            coerce(expr.arg, argType, dom)
                             expr.callee.set_type(Type.FnType(dom, codom))
                             return codom
                         }
@@ -251,7 +240,7 @@ class TypeChecker(val module: Module) {
                 val unbound = targetType.getUnboundTypeParams()
                 if (unbound.isNotEmpty()) {
                     reset_types(expr.callee)
-                    val unified = unify(targetType.dom, argType)
+                    val unified = unify(targetType.dom, argType, true)
                     println(unified)
 
                     val visitor = create_visitor_for_unification_constraints(unified)
@@ -273,8 +262,13 @@ class TypeChecker(val module: Module) {
                     check(expr.body, resolveTypeExpression(expr.returnTypeAnnotation))
                 Type.FnType(dom, codom)
             }
-            is Expression.Ascription -> TODO()
-            is Expression.Cast -> TODO()
+            is Expression.Ascription -> {
+                check(expr.expr, resolveTypeExpression(expr.ascribedType))
+            }
+            is Expression.Cast -> {
+                // TODO have a Cast trait
+                check(expr.expr, resolveTypeExpression(expr.destinationType))
+            }
             is Expression.Sequence -> {
                 for (inst in expr.instructions)
                     typeInstruction(inst)
@@ -299,38 +293,39 @@ class TypeChecker(val module: Module) {
     }
 
     fun checkExpr(expr: Expression, expected_type: Type): Type {
+        fun fallback(): Type {
+            val inferred = inferExpr(expr)
+            return coerce(expr, inferred, expected_type)
+        }
+
         return when (expr) {
-            is Expression.QuoteLiteral -> checkValue(expr.literal, expected_type)
+            is Expression.QuoteLiteral -> check(expr.literal, expected_type)
             is Expression.QuoteType -> TODO()
-            is Expression.IdentifierRef -> {
-                val inferred = inferExpr(expr)
-                coerce(expr, inferred, expected_type)
-            }
+            is Expression.IdentifierRef,
             is Expression.Projection,
             is Expression.ExprSpecialization -> {
-                val t = inferExpr(expr)
-                expect(t, expected_type)
-                t
+                return fallback()
             }
             is Expression.ListExpression -> {
-                if (expected_type !is Type.TupleType)
-                    type_error("expected type of list expression is not a tuple")
-                if (expected_type.elements.size != expr.elements.size)
-                    type_error("expression has ${expr.elements.size} elements but expected type ${expected_type.prettyPrint()} has ${expected_type.elements.size}")
-                val checked = expr.elements.zip(expected_type.elements).map { (e, et) -> check(e, et) }
-                Type.TupleType(checked)
+                if (expected_type is Type.TupleType && expected_type.elements.size == expr.elements.size) {
+                    val checked = expr.elements.zip(expected_type.elements).map { (e, et) -> check(e, et) }
+                    Type.TupleType(checked)
+                } else {
+                    val inferred = inferExpr(expr)
+                    coerce(expr, inferred, expected_type)
+                }
             }
             is Expression.RecordExpression -> {
-                if (expected_type !is Type.RecordType)
-                    type_error("expected type of record expression is not a record")
-                if (expected_type.elements.size != expr.fields.size)
-                    type_error("expression has ${expr.fields.size} elements but expected type ${expected_type.prettyPrint()} has ${expected_type.elements.size}")
-                val checked = expected_type.elements.mapIndexed { i, (fieldName, expFieldType) ->
-                    if (fieldName != expr.fields[i].first)
-                        throw Exception("Field names $fieldName and ${expr.fields[i].first} do not match")
-                    Pair(fieldName, check(expr.fields[i].second, expFieldType))
+                if (expected_type is Type.RecordType && expected_type.elements.size == expr.fields.size) {
+                    val checked = expected_type.elements.mapIndexed { i, (fieldName, expFieldType) ->
+                        if (fieldName != expr.fields[i].first) {
+                            return fallback()
+                        }
+                        Pair(fieldName, check(expr.fields[i].second, expFieldType))
+                    }
+                    Type.RecordType(checked)
                 }
-                Type.RecordType(checked)
+                else fallback()
             }
             is Expression.Invocation -> {
                 val argType = infer(expr.arg)
@@ -341,7 +336,7 @@ class TypeChecker(val module: Module) {
                 val unbound = targetType.getUnboundTypeParams()
                 if (unbound.isNotEmpty()) {
                     reset_types(expr.callee)
-                    val unified = mergeConstraints(unify(targetType.dom, argType), unify(targetType.codom, expected_type))
+                    val unified = mergeConstraints(unify(targetType.dom, argType, true), unify(targetType.codom, expected_type, false))
                     println(unified)
 
                     val visitor = create_visitor_for_unification_constraints(unified)
@@ -353,7 +348,7 @@ class TypeChecker(val module: Module) {
                 }
 
                 coerce(expr.arg, argType, targetType.dom)
-                expect(targetType.codom, expected_type)
+                coerce(expr, targetType.codom, expected_type)
                 targetType.codom
             }
             is Expression.Function -> {
@@ -363,8 +358,6 @@ class TypeChecker(val module: Module) {
                 val codom = check(expr.body, expected_type.codom)
                 Type.FnType(dom, codom)
             }
-            is Expression.Ascription -> TODO()
-            is Expression.Cast -> TODO()
             is Expression.Sequence -> {
                 for (inst in expr.instructions)
                     typeInstruction(inst)
@@ -377,16 +370,20 @@ class TypeChecker(val module: Module) {
                 check(expr.condition, Type.PrimitiveType(PrimitiveTypeEnum.Bool))
                 val left = infer(expr.ifTrue)
                 val right = infer(expr.ifFalse)
+                // TODO unify & coerce this crap
                 expect(left, right)
                 expect(left, expected_type)
                 expected_type
             }
-            is Expression.WhileLoop -> TODO()
+            is Expression.Ascription,
+            is Expression.Cast,
+            is Expression.WhileLoop -> fallback()
         }
     }
 
     fun inferValue(literal: Literal): Type {
         return when (literal) {
+            is Literal.Undef -> cannot_infer(literal)
             is Literal.NumLiteral -> if (literal.number.toIntOrNull() != null) Type.PrimitiveType(
                 PrimitiveTypeEnum.I32
             ) else Type.PrimitiveType(PrimitiveTypeEnum.F32)
@@ -408,6 +405,7 @@ class TypeChecker(val module: Module) {
 
     fun checkValue(literal: Literal, expected_type: Type): Type {
         return when (literal) {
+            is Literal.Undef -> expected_type
             is Literal.NumLiteral -> {
                 if (expected_type !is Type.PrimitiveType)
                     type_error("Cannot type numerical literal '${literal.number}' as a ${expected_type.prettyPrint()}")
@@ -429,7 +427,7 @@ class TypeChecker(val module: Module) {
 
     fun inferPattern(pattern: Pattern): Type {
         return when (pattern) {
-            is Pattern.BinderPattern -> cannot_infer(pattern)
+            is Pattern.BinderPattern -> Type.Top
             is Pattern.LiteralPattern -> infer(pattern.literal)
             is Pattern.ListPattern -> {
                 val inferred = pattern.elements.map { infer(it) }
@@ -507,11 +505,11 @@ class TypeChecker(val module: Module) {
                 expected_type
             }
             is Pattern.TypeAnnotatedPattern -> {
-                // test me
-                val actualType = resolveTypeExpression(pattern.annotatedType)
-                expect_subtype(actualType, expected_type)
-                check(pattern.pattern, actualType)
-                actualType
+                // this should use the inverse typing relation
+                val annotatedType = resolveTypeExpression(pattern.annotatedType)
+                expect_subtype(expected_type, annotatedType)
+                check(pattern.pattern, annotatedType)
+                annotatedType
             }
         }
     }
@@ -565,6 +563,7 @@ class TypeChecker(val module: Module) {
 
     /** Resolves TypeExprs. May still contain unspecialized type variables referring to the outer scope! */
     fun resolveTypeExpression(type: TypeExpr): Type = when (type) {
+        is TypeExpr.Top -> Type.Top
         is TypeExpr.TypeNameRef -> {
             when (val resolved = type.callee.resolved) {
                 is TermLocation.DefRef -> {
@@ -637,10 +636,10 @@ class TypeChecker(val module: Module) {
                 val field = type.elements.find { it.first == id }
                 field?.second ?: throw Exception("No field $id in ${type.prettyPrint()}")
             }
-            is Type.EnumType -> TODO()
+            is Type.EnumType -> TODO("Return Option here")
             is Type.NominalType -> inferProjection(type.dataType, id)
-            is Type.TypeParam -> throw Exception("Can't project on type parameters")
-            else -> throw Exception("Can't project on ${type.javaClass.simpleName}")
+            is Type.TypeParam -> type_error("Can't project on type parameters")
+            else -> type_error("Can't project on ${type.prettyPrint()}")
         }
     }
 

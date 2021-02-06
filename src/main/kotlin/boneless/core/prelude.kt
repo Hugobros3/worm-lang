@@ -75,4 +75,10 @@ forall P, T contract Access = fn P -> T;
 
 val prelude_ref_module = createModule("Prelude_Ref", prelude_ref).also { bind(it) ; type(it) }
 
-val prelude_modules = listOf(prelude_math_module, prelude_logic_module, prelude_cmp_module, prelude_ref_module)
+val prelude_intrinsics = """
+forall T fn undef() -> T = builtin_undef;    
+""".trimIndent()
+
+val prelude_intrinsics_module = createModule("Prelude_Intrinsics", prelude_intrinsics).also { bind(it) ; type(it) }
+
+val prelude_modules = listOf(prelude_math_module, prelude_logic_module, prelude_cmp_module, prelude_ref_module, prelude_intrinsics_module)

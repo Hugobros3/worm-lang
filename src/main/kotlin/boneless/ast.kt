@@ -83,7 +83,7 @@ sealed class Expression : Typeable by typeable() {
     data class Conditional(val condition: Expression, val ifTrue: Expression, val ifFalse: Expression) : Expression()
     data class WhileLoop(val loopCondition: Expression, val body: Expression) : Expression()
 
-    var deducedImplicitCast: Type? = null
+    var implicitUpcast: Type? = null
 }
 
 sealed class TypeExpr {
@@ -97,12 +97,14 @@ sealed class TypeExpr {
     data class ArrayType(val elementType: TypeExpr, val size: Int) : TypeExpr()
     data class EnumType(val elements: List<Pair<Identifier, TypeExpr>>) : TypeExpr()
     data class FnType(val dom: TypeExpr, val codom: TypeExpr) : TypeExpr()
+    object Top: TypeExpr()
 }
 
 sealed class Literal : Typeable by typeable() {
     data class NumLiteral(val number: String): Literal()
     data class StrLiteral(val string: String): Literal()
     data class BoolLiteral(val value: Boolean): Literal()
+    class Undef(): Literal()
 
     // These can't really be parsed in expressions (the parser has no way of knowing if all the parameters are constant)
     data class ListLiteral(val elements: List<Literal>): Literal()

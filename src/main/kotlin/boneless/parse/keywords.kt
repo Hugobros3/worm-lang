@@ -14,6 +14,9 @@ enum class Keyword(val str: String) {
     Forall("forall"),
     Specialization("::"),
 
+    TopType("Top"),
+    Undef("builtin_undef"),
+
     Contract("contract"),
     Instance("instance"),
 

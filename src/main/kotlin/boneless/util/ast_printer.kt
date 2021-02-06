@@ -60,12 +60,12 @@ private class PrettyPrinter(val resugarizePrefixAndInfixSymbols: Boolean = true,
         is Literal.StrLiteral -> "\"$string\""
         is Literal.ListLiteral -> "(" + elements.joinToString(", ") { it.print() } + ")"
         is Literal.RecordLiteral -> "(" + fields.joinToString(", ") { (id, e) -> "$id = $e" } + ")"
+        is Literal.Undef -> "builtin_undef"
     }
 
     fun Expression.print(infixOpPriority: Int = -1, firstOperand: Boolean = true): String {
         return if (printInferredTypes) {
-            "(${this.print_(infixOpPriority, firstOperand)} /* ${this.type?.print() ?: 
-            throw Exception("")} */)"
+            "(${this.print_(infixOpPriority, firstOperand)} /* ${this.type.print() + (if (implicitUpcast != null) " implicit_upcast_as ${implicitUpcast!!.print()}" else "")  } */)"
         } else this.print_(infixOpPriority, firstOperand)
     }
 
@@ -134,10 +134,12 @@ private class PrettyPrinter(val resugarizePrefixAndInfixSymbols: Boolean = true,
 
         this is TypeExpr.EnumType -> "[" + elements.joinToString(" | ") { (name, type) -> name + "=" + type.print() } + "]"
         this is TypeExpr.FnType -> "fn " + dom.print() + " -> " + codom.print()
+        this is TypeExpr.Top -> "Top"
         else -> throw Exception("Unprintable type")
     }
 
     fun Type.print(): String = when {
+        this is Type.Top -> "Top"
         this is Type.PrimitiveType -> primitiveType.name
         this is Type.TupleType && elements.isEmpty() -> "[]"
         this is Type.TupleType && elements.isNotEmpty() -> "[" + elements.joinToString(", ") { e -> e.print() } + "]"

@@ -298,4 +298,75 @@ class TestType {
             );
         """.trimIndent())
     }
+
+    @Test
+    fun testSubtypingBasic() {
+        testType("""
+            fn f() => {
+                let x: [a = I32] = (a = 36, b = 37);
+                let y: [a = I32 | b = F32] = (a = 36);
+                let z: [I32, F32] = (a = 36, b = 0.5);
+                
+                let w: [I32..3] = (1, 2, 3);
+                let r: [I32, I32, I32] = w;
+            };
+        """.trimIndent())
+    }
+
+    @Test
+    fun testSubtypingFunctions() {
+        testType("""
+            fn f(
+                a: fn [a = I32, b = I32] -> []
+            ) => {
+                let x: fn [a = I32, b = I32] -> [] = a;
+                let y: fn [a = I32, b = I32, c = I32] -> [] = a;
+            };
+        """.trimIndent())
+
+        expectFailure {
+            testType("""
+                fn f(
+                    a: fn [a = I32, b = I32] -> []
+                ) => {
+                    let y: fn [a = I32] -> [] = a;
+                };
+            """.trimIndent())
+        }
+    }
+
+    @Test
+    fun testPatternSubtyping() {
+        testType("""
+            fn f1 a => a;
+            fn f2 a: Top => a;
+            fn f3 a -> Top = a;
+        """.trimIndent())
+    }
+
+    @Test
+    fun testUndef() {
+        testType("""
+            fn f() => {
+                let x: I32 = undef();
+            };
+        """.trimIndent())
+    }
+
+     @Test
+     fun testCast() {
+         testType("""
+             fn f(
+                a: [a = I32, b = I32]
+            ) => {
+                let x = a as [a = I32];
+            };
+         """.trimIndent())
+
+         expectFailure {
+             testType("""
+                 fn f a => (a, a as I32);
+             """.trimIndent())
+         }
+     }
 }

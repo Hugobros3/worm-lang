@@ -32,22 +32,23 @@ fun findTypeParams(type: Type): List<TermLocation.TypeParamRef> = when(type) {
     is Type.Top -> emptyList()
 }
 
-fun unify(type: Type, expected: Type): Map<Type.TypeParam, Type> {
+// assumes 'expected' does not feature type parameters itself
+fun unify(type: Type, expected: Type, invertSubtypingRelation: Boolean): Map<Type.TypeParam, Type> {
     assert(findTypeParams(expected).isEmpty())
-    return unify_(type, expected)
+    return unify_(type, expected, invertSubtypingRelation)
 }
 
-// assumes 'expected' does not feature type parameters itself
-private fun unify_(type: Type, expected: Type): Map<Type.TypeParam, Type> {
+private fun unify_(type: Type, expected: Type, invertSubtypingRelation: Boolean): Map<Type.TypeParam, Type> {
     return when {
-        isSubtype(type, expected) -> emptyMap()
+        isSubtype(expected, type) && invertSubtypingRelation -> emptyMap()
+        isSubtype(type, expected) && !invertSubtypingRelation -> emptyMap()
         type is Type.TypeParam -> mapOf(type to expected)
         type is Type.FnType && expected is Type.FnType -> mergeConstraints(
-            unify(type.dom, expected.dom),
-            unify(type.codom, expected.codom)
+            unify(type.dom, expected.dom, true),
+            unify(type.codom, expected.codom, false)
         )
         type is Type.TupleType && expected is Type.TupleType -> type.elements.zip(expected.elements)
-            .map { (l, r) -> unify(l, r) }.fold(emptyMap(), ::mergeConstraints)
+            .map { (l, r) -> unify(l, r, invertSubtypingRelation) }.fold(emptyMap(), ::mergeConstraints)
         else -> TODO()
         /*type is Type.PrimitiveType -> TODO()
         type is Type.RecordType -> TODO()
