@@ -25,6 +25,8 @@ class TestParser {
         val program2 = parser2.parseModule()
         assert(program == program2) {
             println(program2.prettyPrint())
+            println("P1: $program")
+            println("P2: $program2")
         }
     }
 

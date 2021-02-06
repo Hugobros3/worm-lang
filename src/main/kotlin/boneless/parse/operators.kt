@@ -47,7 +47,7 @@ enum class InfixOperator(val token: Keyword, val priority: Int, val rewrite_: St
 
     Projection(Keyword.Projection, 100, null),
     Application(Keyword.None, 100, null),
-    Assignment(Keyword.Assign, 120, "Assignable::assign")
+    Assignment(Keyword.Assign, 20, "Assignable::assign")
     ;
 
     fun rewrite() = if(rewrite_ == null) null else {

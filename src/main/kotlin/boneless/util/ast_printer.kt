@@ -48,7 +48,7 @@ private class PrettyPrinter(val resugarizePrefixAndInfixSymbols: Boolean = true,
     }
 
     private fun Instruction.print() = when (this) {
-        is Instruction.Let -> "let ${pattern.print()}" + " = " + body.print() + ";"
+        is Instruction.Let -> "let " + (if (mutable) "mut " else "") + " ${pattern.print()}" + " = " + body.print() + ";"
         is Instruction.Evaluate -> expr.prettyPrint() + ";"
     }
 
@@ -97,9 +97,9 @@ private class PrettyPrinter(val resugarizePrefixAndInfixSymbols: Boolean = true,
             }
             is Expression.ListExpression -> "(" + elements.joinToString(", ") { it.print() } + ")"
             is Expression.RecordExpression -> "(" + fields.map { (id, e) -> "$id = ${e.print()}" }.joinToString(", ") + ")"
-            is Expression.Sequence -> "{\n" + instructions.joinToString("") { shift(it.print()) + "\n" } + if (yieldExpression != null) (shift(
+            is Expression.Sequence -> "{\n" + instructions.joinToString("") { shift(it.print()) + "\n" } + (if (yieldExpression != null) (shift(
                 yieldExpression.print(0)
-            ) + "\n") else "" + "}"
+            ) + "\n") else "") + "}"
             is Expression.Function -> {
                 if (returnTypeAnnotation == null)
                     open() + "fn " + param.print() + " => " + body.print() + close()

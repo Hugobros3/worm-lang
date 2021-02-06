@@ -8,110 +8,118 @@ import java.io.ByteArrayOutputStream
 import java.io.DataOutputStream
 import java.lang.Integer.max
 
-data class JumpTarget(internal val bytecodeOffset: Int)
+internal sealed class BasicBlockOutFlow {
+    object Undef: BasicBlockOutFlow()
+    object FnReturn: BasicBlockOutFlow()
+    data class Branch(val mode: BranchType, val ifTrue: BasicBlock, val ifFalse: BasicBlock): BasicBlockOutFlow()
+    data class Jump(val successor: BasicBlock): BasicBlockOutFlow()
+}
 
-internal sealed class BBBSucc {
-    object Undef: BBBSucc()
-    object FnReturn: BBBSucc()
-    data class Branch(val mode: BranchType, val ifTrue: BasicBlockBuilder, val ifFalse: BasicBlockBuilder): BBBSucc()
-    data class Jump(val successor: BasicBlockBuilder): BBBSucc()
+enum class BranchType {
+    IF_LESS_EQUAL,
+    IF_LESS,
+    IF_EQ,
+    IF_NEQ,
+    IF_GREATER,
+    IF_GREATER_EQUAL,
+
+    ICMP_LESS_EQUAL,
+    ICMP_LESS,
+    ICMP_EQ,
+    ICMP_NEQ,
+    ICMP_GREATER,
+    ICMP_GREATER_EQUAL,
+}
+private data class JumpTarget(val bytecodeOffset: Int)
+
+private sealed class Patch {
+    class JumpTargetPatch(override val bytecodeLocation: Int, private val initialPosition: Int) : Patch() {
+        lateinit var target: JumpTarget
+        override fun apply_patch(ba: ByteArray) {
+            val diff = target.bytecodeOffset - initialPosition
+            ba[bytecodeLocation + 0] = ((diff shr 8) and 0xff).toByte()
+            ba[bytecodeLocation + 1] = ((diff shr 0) and 0xff).toByte()
+        }
+    }
+
+    abstract val bytecodeLocation: Int
+    abstract fun apply_patch(ba: ByteArray)
 }
 
 class MethodBuilder(private val classFileBuilder: ClassFileBuilder, initialLocals: List<VerificationType>) {
-    val bbBuilders = mutableListOf<BasicBlockBuilder>()
-    var cnt = 0
+    val initialBasicBlock = BasicBlock(classFileBuilder, initialLocals, emptyList(), "entry_point")
 
-    val initialBasicBlock = BasicBlockBuilder(classFileBuilder, initialLocals, emptyList(), "entry_point")
+    private val bbBuilders = mutableListOf<BasicBlock>()
+    private var cnt = 0
+
+    private val baos___ = ByteArrayOutputStream()
+    private val dos = DataOutputStream(baos___)
+    private var lastStackMapOffset = 0
+    private val stackMapFrames = mutableListOf<Attribute.StackMapTable.StackMapFrame>()
+    private fun position() = baos___.size()
+
+    private val patches = mutableListOf<Patch>()
 
     init {
         bbBuilders += initialBasicBlock
     }
 
-    fun basicBlock(
-        pre_locals: List<VerificationType>,
-        pre_stack: List<VerificationType>,
-        bbName: String = "basicBlock"
-    ): BasicBlockBuilder {
+    fun basicBlock(pre_locals: List<VerificationType>, pre_stack: List<VerificationType>, bbName: String = "basicBlock"): BasicBlock {
         var uniqueBBName = bbName
         if (bbBuilders.find { it.bbName == bbName } != null) {
             uniqueBBName = bbName + "${cnt++}"
         }
-        val bbb = BasicBlockBuilder(classFileBuilder, pre_locals, pre_stack, uniqueBBName)
+        val bbb = BasicBlock(classFileBuilder, pre_locals, pre_stack, uniqueBBName)
         bbBuilders += bbb
         return bbb
     }
 
-    fun basicBlock(
-        predecessor: BasicBlockBuilder,
-        bbName: String = "basicBlock",
-        additionalStackInputs: List<VerificationType> = emptyList()
-    ): BasicBlockBuilder {
+    fun basicBlock(predecessor: BasicBlock, bbName: String = "basicBlock", additionalStackInputs: List<VerificationType> = emptyList()): BasicBlock {
         return basicBlock(predecessor.locals, predecessor.stack + additionalStackInputs, bbName)
     }
-
-    private val patches = mutableListOf<Patch>()
-    sealed class Patch {
-        class JumpTargetPatch(override val bytecodeLocation: Int, private val initialPosition: Int) : Patch() {
-            lateinit var target: JumpTarget
-            override fun apply_patch(ba: ByteArray) {
-                val diff = target.bytecodeOffset - initialPosition
-                ba[bytecodeLocation + 0] = ((diff shr 8) and 0xff).toByte()
-                ba[bytecodeLocation + 1] = ((diff shr 0) and 0xff).toByte()
-            }
-        }
-
-        abstract val bytecodeLocation: Int
-        abstract fun apply_patch(ba: ByteArray)
-    }
-
-    val baos___ = ByteArrayOutputStream()
-    val dos = DataOutputStream(baos___)
-    var lastStackMapOffset = 0
-    val stackMapFrames = mutableListOf<Attribute.StackMapTable.StackMapFrame>()
-    fun position() = baos___.size()
 
     fun finish(): List<Attribute> {
         var max_stack = 0
         var max_locals = 0
 
-        fun emit_bb(bbb: BasicBlockBuilder): Int {
-            if (bbb.emitted_position != null)
-                return bbb.emitted_position!!
+        fun emit_bb(bb: BasicBlock): Int {
+            if (bb.emitted_position != null)
+                return bb.emitted_position!!
             else {
                 // TODO check locals/stack match upon control flow
-                max_locals = max(max_locals, bbb.max_locals)
-                max_stack = max(max_stack, bbb.max_stack)
-                bbb.finish_()
+                max_locals = max(max_locals, bb.max_locals)
+                max_stack = max(max_stack, bb.max_stack)
+                bb.finalize()
                 val p = position()
-                dos.write(bbb.finished!!.code)
-                bbb.emitted_position = p
-                when (val succ = bbb.succ!!) {
-                    BBBSucc.Undef -> throw Exception("Uninitialized control flow !")
-                    BBBSucc.FnReturn -> {
+                dos.write(bb.code)
+                bb.emitted_position = p
+                when (val succ = bb.succ!!) {
+                    BasicBlockOutFlow.Undef -> throw Exception("Uninitialized control flow !")
+                    BasicBlockOutFlow.FnReturn -> {
                         /** nothing to do, instruction was already in the bb */
                     }
-                    is BBBSucc.Branch -> {
+                    is BasicBlockOutFlow.Branch -> {
                         // TODO use mode to check the bb yields what we need on the stack
-                        val if_true = branch(succ.mode)
+                        val ifTrue = branch(succ.mode)
                         // If the jump target wasn't emitted already, write it directly
                         if (succ.ifFalse.emitted_position == null) {
                             emit_bb(succ.ifFalse)
                         } else {
                             // Otherwise we have to create a GOTO
-                            val goto_target = goto()
-                            goto_target.target = succ.ifFalse.get_jump_target()
+                            val gotoTarget = goto()
+                            gotoTarget.target = succ.ifFalse.get_jump_target(bb)
                         }
                         emit_bb(succ.ifTrue)
-                        if_true.target = succ.ifTrue.get_jump_target()
+                        ifTrue.target = succ.ifTrue.get_jump_target(bb)
                     }
-                    is BBBSucc.Jump -> {
+                    is BasicBlockOutFlow.Jump -> {
                         // If the jump target wasn't emitted already, write it directly
                         if (succ.successor.emitted_position == null) {
                             emit_bb(succ.successor)
                         } else {
                             // Otherwise we have to create a GOTO
-                            val goto_target = goto()
-                            goto_target.target = succ.successor.get_jump_target()
+                            val gotoTarget = goto()
+                            gotoTarget.target = succ.successor.get_jump_target(bb)
                         }
                     }
                 }
@@ -126,7 +134,7 @@ class MethodBuilder(private val classFileBuilder: ClassFileBuilder, initialLocal
             patch.apply_patch(ba)
         }
 
-        for (bbb in bbBuilders.filter { it.is_jump_target }.sortedBy { it.emitted_position!! }) {
+        for (bbb in bbBuilders.filter { it.isJumpTarget }.sortedBy { it.emitted_position!! }) {
             bbb.emit_stack_map()
         }
 
@@ -148,13 +156,12 @@ class MethodBuilder(private val classFileBuilder: ClassFileBuilder, initialLocal
         return patch
     }
 
-    private fun BasicBlockBuilder.get_jump_target(): JumpTarget {
-        this.is_jump_target = true
-        val jt = JumpTarget(this.emitted_position!!)
-        return jt
+    private fun BasicBlock.get_jump_target(predecessor: BasicBlock): JumpTarget {
+        this.predecessors.add(predecessor)
+        return JumpTarget(emitted_position!!)
     }
 
-    private fun BasicBlockBuilder.emit_stack_map() {
+    private fun BasicBlock.emit_stack_map() {
         val pos = this.emitted_position!!
         assert(pos >= lastStackMapOffset)
         val offset = pos - lastStackMapOffset
@@ -172,10 +179,12 @@ class MethodBuilder(private val classFileBuilder: ClassFileBuilder, initialLocal
     private fun branch(mode: BranchType): Patch.JumpTargetPatch {
         val before_goto = position()
         when (mode) {
-            BranchType.IF_GREATER_EQUAL -> instruction(JVMInstruction.ifge)
-            BranchType.IF_GREATER -> instruction(JVMInstruction.ifgt)
+            BranchType.IF_LESS_EQUAL -> instruction(JVMInstruction.ifle)
+            BranchType.IF_LESS -> instruction(JVMInstruction.iflt)
             BranchType.IF_EQ -> instruction(JVMInstruction.ifeq)
             BranchType.IF_NEQ -> instruction(JVMInstruction.ifne)
+            BranchType.IF_GREATER -> instruction(JVMInstruction.ifgt)
+            BranchType.IF_GREATER_EQUAL -> instruction(JVMInstruction.ifge)
 
             BranchType.ICMP_LESS_EQUAL -> instruction(JVMInstruction.if_icmple)
             BranchType.ICMP_LESS -> instruction(JVMInstruction.if_icmplt)
@@ -183,7 +192,7 @@ class MethodBuilder(private val classFileBuilder: ClassFileBuilder, initialLocal
             BranchType.ICMP_NEQ -> instruction(JVMInstruction.if_icmpne)
             BranchType.ICMP_GREATER -> instruction(JVMInstruction.if_icmpgt)
             BranchType.ICMP_GREATER_EQUAL -> instruction(JVMInstruction.if_icmpge)
-            else -> throw Exception()
+            else -> throw Exception("Forgot a branch type here")
         }
         return patchable_jump(before_goto)
     }
@@ -193,7 +202,7 @@ class MethodBuilder(private val classFileBuilder: ClassFileBuilder, initialLocal
     }
 }
 
-class BasicBlockBuilder internal constructor(
+class BasicBlock internal constructor(
     private val classFileBuilder: ClassFileBuilder,
     internal val pre_locals: List<VerificationType>,
     internal val pre_stack: List<VerificationType>,
@@ -206,14 +215,14 @@ class BasicBlockBuilder internal constructor(
 
     private val baos___ = ByteArrayOutputStream()
     private val dos = DataOutputStream(baos___)
+    private var finalized = false
 
-    internal var finished: BasicBlock? = null
-    internal var succ: BBBSucc? = null
+    internal lateinit var code: ByteArray
+    internal var succ: BasicBlockOutFlow? = null
     internal var emitted_position: Int? = null
 
-    //internal var jump_target: JumpTarget?
-    internal var is_jump_target = false
-    internal val preds = mutableListOf<BasicBlock>()
+    internal val isJumpTarget: Boolean get() = predecessors.isNotEmpty()
+    internal val predecessors = mutableListOf<BasicBlock>()
 
     private fun pushStack(t: VerificationType) {
         stack = stack + listOf(t)
@@ -237,6 +246,7 @@ class BasicBlockBuilder internal constructor(
     }
 
     fun reserveVariable(t: Type): Int {
+        assertNotFinalized()
         val vt = classFileBuilder.getVerificationType(t)
         locals = locals + listOf(vt ?: throw Exception("No reserving variables for zero-sized types: $t"))
         max_locals = max(max_locals, locals.size)
@@ -244,6 +254,7 @@ class BasicBlockBuilder internal constructor(
     }
 
     fun loadVariable(i: Int) {
+        assertNotFinalized()
         if (i >= locals.size)
             throw Exception("Variable $i is not reserved")
         val t = locals[i]
@@ -292,6 +303,7 @@ class BasicBlockBuilder internal constructor(
     }
 
     fun setVariable(i: Int) {
+        assertNotFinalized()
         if (i >= locals.size)
             throw Exception("Variable $i is not reserved")
         val t = locals[i]
@@ -329,6 +341,7 @@ class BasicBlockBuilder internal constructor(
     }
 
     fun pushInt(num: Int) {
+        assertNotFinalized()
         when  {
             num < 256 -> {
                 instruction(JVMInstruction.bipush)
@@ -344,6 +357,7 @@ class BasicBlockBuilder internal constructor(
     }
 
     fun pushDefaultValueType(className: String) {
+        assertNotFinalized()
         instruction(JVMInstruction.defaultvalue)
         val cc_index = classFileBuilder.constantClass(className)
         immediate_short(cc_index)
@@ -351,6 +365,7 @@ class BasicBlockBuilder internal constructor(
     }
 
     fun mutateSetFieldName(className: String, fieldName: String, memberType: Type, aggregateType: Type) {
+        assertNotFinalized()
         val vmt = classFileBuilder.getVerificationType(memberType)  ?: throw Exception("Member type can't be zero sized: $aggregateType")
         val vat = classFileBuilder.getVerificationType(aggregateType) ?: throw Exception("Aggregate type can't be zero sized: $aggregateType")
         val fieldDescriptor = getFieldDescriptor(memberType)!!
@@ -362,6 +377,7 @@ class BasicBlockBuilder internal constructor(
     }
 
     fun getField(className: String, fieldName: String, fieldType: Type) {
+        assertNotFinalized()
         popStack(VerificationType.Object(classFileBuilder.constantClass(className).toInt()))
         instruction(JVMInstruction.getfield)
         val fieldDescriptor = getFieldDescriptor(fieldType)  ?: throw Exception("Extracted field can't be zero sized: $fieldType")
@@ -370,11 +386,13 @@ class BasicBlockBuilder internal constructor(
     }
 
     fun callStatic(className: String, methodName: String, methodType: Type.FnType) {
+        assertNotFinalized()
         callStaticInternal(className, methodName, getMethodDescriptor(methodType), classFileBuilder.getVerificationType(methodType.codom))
     }
 
     /** Version that can call into foreign stuff with multiple args */
     fun callStaticInternal(className: String, methodName: String, methodDescriptor: MethodDescriptor, expectedReturnType: VerificationType?) {
+        assertNotFinalized()
         for (fd in methodDescriptor.dom.reversed()) {
             popStack(classFileBuilder.getVerificationType(fd))
         }
@@ -387,6 +405,7 @@ class BasicBlockBuilder internal constructor(
     }
     
     fun add_i32() {
+        assertNotFinalized()
         popStack(VerificationType.Integer)
         popStack(VerificationType.Integer)
         instruction(JVMInstruction.iadd)
@@ -394,6 +413,7 @@ class BasicBlockBuilder internal constructor(
     }
     
     fun sub_i32() {
+        assertNotFinalized()
         popStack(VerificationType.Integer)
         popStack(VerificationType.Integer)
         instruction(JVMInstruction.isub)
@@ -401,6 +421,7 @@ class BasicBlockBuilder internal constructor(
     }
     
     fun mul_i32() {
+        assertNotFinalized()
         popStack(VerificationType.Integer)
         popStack(VerificationType.Integer)
         instruction(JVMInstruction.imul)
@@ -408,6 +429,7 @@ class BasicBlockBuilder internal constructor(
     }
     
     fun div_i32() {
+        assertNotFinalized()
         popStack(VerificationType.Integer)
         popStack(VerificationType.Integer)
         instruction(JVMInstruction.idiv)
@@ -415,6 +437,7 @@ class BasicBlockBuilder internal constructor(
     }
     
     fun mod_i32() {
+        assertNotFinalized()
         popStack(VerificationType.Integer)
         popStack(VerificationType.Integer)
         instruction(JVMInstruction.irem)
@@ -422,12 +445,14 @@ class BasicBlockBuilder internal constructor(
     }
     
     fun neg_i32() {
+        assertNotFinalized()
         popStack(VerificationType.Integer)
         instruction(JVMInstruction.ineg)
         pushStack(VerificationType.Integer)
     }
 
     fun add_f32() {
+        assertNotFinalized()
         popStack(VerificationType.Float)
         popStack(VerificationType.Float)
         instruction(JVMInstruction.fadd)
@@ -435,6 +460,7 @@ class BasicBlockBuilder internal constructor(
     }
 
     fun sub_f32() {
+        assertNotFinalized()
         popStack(VerificationType.Float)
         popStack(VerificationType.Float)
         instruction(JVMInstruction.fsub)
@@ -442,6 +468,7 @@ class BasicBlockBuilder internal constructor(
     }
 
     fun mul_f32() {
+        assertNotFinalized()
         popStack(VerificationType.Float)
         popStack(VerificationType.Float)
         instruction(JVMInstruction.fmul)
@@ -449,6 +476,7 @@ class BasicBlockBuilder internal constructor(
     }
 
     fun div_f32() {
+        assertNotFinalized()
         popStack(VerificationType.Float)
         popStack(VerificationType.Float)
         instruction(JVMInstruction.fdiv)
@@ -456,6 +484,7 @@ class BasicBlockBuilder internal constructor(
     }
 
     fun mod_f32() {
+        assertNotFinalized()
         popStack(VerificationType.Float)
         popStack(VerificationType.Float)
         instruction(JVMInstruction.frem)
@@ -463,12 +492,14 @@ class BasicBlockBuilder internal constructor(
     }
 
     fun neg_f32() {
+        assertNotFinalized()
         popStack(VerificationType.Float)
         instruction(JVMInstruction.fneg)
         pushStack(VerificationType.Float)
     }
 
     fun and_i32() {
+        assertNotFinalized()
         popStack(VerificationType.Integer)
         popStack(VerificationType.Integer)
         instruction(JVMInstruction.iand)
@@ -476,6 +507,7 @@ class BasicBlockBuilder internal constructor(
     }
 
     fun or_i32() {
+        assertNotFinalized()
         popStack(VerificationType.Integer)
         popStack(VerificationType.Integer)
         instruction(JVMInstruction.ior)
@@ -483,6 +515,7 @@ class BasicBlockBuilder internal constructor(
     }
 
     fun xor_i32() {
+        assertNotFinalized()
         popStack(VerificationType.Integer)
         popStack(VerificationType.Integer)
         instruction(JVMInstruction.ixor)
@@ -490,6 +523,7 @@ class BasicBlockBuilder internal constructor(
     }
 
     fun fcmpl() {
+        assertNotFinalized()
         popStack(VerificationType.Float)
         popStack(VerificationType.Float)
         instruction(JVMInstruction.fcmpl)
@@ -497,6 +531,7 @@ class BasicBlockBuilder internal constructor(
     }
 
     fun fcmpg() {
+        assertNotFinalized()
         popStack(VerificationType.Float)
         popStack(VerificationType.Float)
         instruction(JVMInstruction.fcmpg)
@@ -504,11 +539,17 @@ class BasicBlockBuilder internal constructor(
     }
 
     fun return_void() {
+        assertNotFinalized()
+        if (succ != null)
+            throw Exception("Can't set successor twice")
         instruction(JVMInstruction.`return`)
-        succ = BBBSucc.FnReturn
+        succ = BasicBlockOutFlow.FnReturn
     }
 
     fun return_value(type: Type) {
+        assertNotFinalized()
+        if (succ != null)
+            throw Exception("Can't set successor twice")
         val vt = classFileBuilder.getVerificationType(type) ?: throw Exception("Return can't be zero sized: $type")
         popStack(vt)
         when(vt) {
@@ -519,24 +560,31 @@ class BasicBlockBuilder internal constructor(
             is VerificationType.Object -> instruction(JVMInstruction.areturn)
             else -> throw Exception("Unhandled vt: vt")
         }
-        succ = BBBSucc.FnReturn
+        succ = BasicBlockOutFlow.FnReturn
     }
 
-    fun jump(target: BasicBlockBuilder) {
+    fun jump(target: BasicBlock) {
+        assertNotFinalized()
         if (succ != null)
             throw Exception("Can't set successor twice")
-        succ = BBBSucc.Jump(target)
+        succ = BasicBlockOutFlow.Jump(target)
     }
 
-    fun branch(mode: BranchType, ifTrue: BasicBlockBuilder, ifFalse: BasicBlockBuilder) {
+    fun branch(mode: BranchType, ifTrue: BasicBlock, ifFalse: BasicBlock) {
+        assertNotFinalized()
         if (succ != null)
             throw Exception("Can't set successor twice")
-        succ = BBBSucc.Branch(mode, ifTrue, ifFalse)
+        succ = BasicBlockOutFlow.Branch(mode, ifTrue, ifFalse)
     }
 
-    fun finish_(): BasicBlock {
-        if (finished != null) throw Exception("Can't finish twice")
-        finished = BasicBlock(pre_locals, pre_stack, locals, stack, BBSuccessor.Undef, baos___.toByteArray())
-        return finished!!
+    private fun assertNotFinalized() {
+        if (finalized) throw Exception("BB was already finalized")
+    }
+
+    internal fun finalize() {
+        if (finalized) throw Exception("Can't finish twice")
+        code = baos___.toByteArray()
+        dos.close()
+        finalized = true
     }
 }

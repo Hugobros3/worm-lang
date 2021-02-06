@@ -13,7 +13,7 @@ class FunctionEmitter private constructor(private val emitter: Emitter, private 
     lateinit var builder: MethodBuilder private set
     val patternsAccess = mutableListOf<Map<Pattern, PutOnStack>>()
 
-    lateinit var bb: BasicBlockBuilder
+    lateinit var bb: BasicBlock
 
     constructor(emitter: Emitter, cfBuilder: ClassFileBuilder, fn: Expression.Function) : this(emitter, cfBuilder) {
         var initialLocals = emptyList<VerificationType>()

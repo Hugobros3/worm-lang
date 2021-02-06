@@ -96,7 +96,7 @@ class Emitter(val modules: List<Module>, val outputDir: File) {
         return builder.finish()
     }
 
-    internal fun emit_literal(builder: BasicBlockBuilder, literal: Literal) {
+    internal fun emit_literal(builder: BasicBlock, literal: Literal) {
         when (literal) {
             is Literal.NumLiteral -> {
                 when((literal.type as Type.PrimitiveType).primitiveType) {
