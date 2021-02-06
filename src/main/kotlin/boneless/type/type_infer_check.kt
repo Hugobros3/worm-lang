@@ -411,6 +411,7 @@ class TypeChecker(val module: Module) {
             is Literal.NumLiteral -> if (literal.number.toIntOrNull() != null) Type.PrimitiveType(
                 PrimitiveTypeEnum.I32
             ) else Type.PrimitiveType(PrimitiveTypeEnum.F32)
+            is Literal.BoolLiteral -> Type.PrimitiveType(PrimitiveTypeEnum.Bool)
             is Literal.StrLiteral -> TODO()
             is Literal.ListLiteral -> {
                 val types = literal.elements.map { infer(it) }
@@ -433,6 +434,7 @@ class TypeChecker(val module: Module) {
                     type_error("Cannot type numerical literal '${literal.number}' as a ${expected_type.prettyPrint()}")
                 expected_type
             }
+            is Literal.BoolLiteral -> { expect(Type.PrimitiveType(PrimitiveTypeEnum.Bool), expected_type) ; Type.PrimitiveType(PrimitiveTypeEnum.Bool) }
             is Literal.StrLiteral -> TODO()
             is Literal.ListLiteral -> {
                 if (expected_type !is Type.TupleType)

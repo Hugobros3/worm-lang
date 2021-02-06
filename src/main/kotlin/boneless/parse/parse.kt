@@ -358,6 +358,8 @@ class Parser(private val inputAsText: String, private val tokens: List<Tokenizer
 
                 return ref
             }
+            accept("true") -> return Expression.QuoteLiteral(Literal.BoolLiteral(true))
+            accept("false") -> return Expression.QuoteLiteral(Literal.BoolLiteral(false))
             accept("if") -> {
                 val condition = acceptExpression(0)!!
                 expect("then")

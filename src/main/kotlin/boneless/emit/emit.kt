@@ -116,7 +116,6 @@ class Emitter(val modules: List<Module>, val outputDir: File) {
         when (literal) {
             is Literal.NumLiteral -> {
                 when((literal.type as Type.PrimitiveType).primitiveType) {
-                    PrimitiveTypeEnum.Bool -> TODO()
                     PrimitiveTypeEnum.I32 -> {
                         builder.pushInt(literal.number.toInt())
                     }
@@ -131,6 +130,8 @@ class Emitter(val modules: List<Module>, val outputDir: File) {
                 TODO()
             }
             is Literal.RecordLiteral -> TODO()
+            is Literal.BoolLiteral -> if (literal.value) builder.pushInt(1) else builder.pushInt(0)
+            else -> throw Exception("Unhandled literal emission: $literal")
         }
     }
 }

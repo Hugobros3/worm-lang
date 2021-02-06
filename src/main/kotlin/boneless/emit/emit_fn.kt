@@ -76,7 +76,7 @@ class FunctionEmitter private constructor(private val emitter: Emitter, private 
                             return
                         // Because of reasons (I suspect having to do with ABI stability), we do not actually have the permission to build a tuple "manually"
                         // outside of its declaring class. Instead, we are required to call the constructor for it, which is mildly ugly but hopefully
-                        // the JVM's good reputation for being really good at optmizing away fn calls will save our bacon :)
+                        // the JVM's good reputation for being really good at optimizing away fn calls will save our bacon :)
                         for (element in expr.elements)
                             emit(element)
                         bb.callStaticInternal(mangled_datatype_name(expr.type!!), "<init>", getTupleInitializationMethodDescriptor(type), cfBuilder.getVerificationType(type))
@@ -153,7 +153,23 @@ class FunctionEmitter private constructor(private val emitter: Emitter, private 
                 ifFalseBB.jump(joinBB)
                 bb = joinBB
             }
-            is Expression.WhileLoop -> TODO()
+            is Expression.WhileLoop -> {
+                val loopBody = builder.basicBlock(bb, bbName = "loop_body")
+                val loopJoin = builder.basicBlock(bb, bbName = "loop_join")
+                emit(expr.loopCondition)
+                bb.branch(BranchType.IF_NEQ, loopBody, loopJoin)
+                bb = loopBody
+
+                emit(expr.body)
+                val vt = cfBuilder.getVerificationType(expr.body.type!!)
+                if (vt != null) {
+                    bb.drop_value(vt)
+                }
+
+                emit(expr.loopCondition)
+                bb.branch(BranchType.IF_NEQ, loopBody, loopJoin)
+                bb = loopJoin
+            }
             is Expression.ExprSpecialization -> TODO()
             is Expression.Projection -> TODO()
             else -> throw Exception("Unhandled expression ast node: $expr")
@@ -174,7 +190,13 @@ class FunctionEmitter private constructor(private val emitter: Emitter, private 
                 emitter.registerPattern(m, instruction.pattern, procedure)
                 patternsAccess += m
             }
-            is Instruction.Evaluate -> TODO()
+            is Instruction.Evaluate -> {
+                emit(instruction.expr)
+                val vt = cfBuilder.getVerificationType(instruction.expr.type!!)
+                if (vt != null) {
+                    bb.drop_value(vt)
+                }
+            }
         }
     }
 }

@@ -98,6 +98,7 @@ sealed class TypeExpr {
 sealed class Literal : Typeable by typeable() {
     data class NumLiteral(val number: String): Literal()
     data class StrLiteral(val string: String): Literal()
+    data class BoolLiteral(val value: Boolean): Literal()
 
     // These can't really be parsed in expressions (the parser has no way of knowing if all the parameters are constant)
     data class ListLiteral(val elements: List<Literal>): Literal()

@@ -55,6 +55,7 @@ private class PrettyPrinter(val resugarizePrefixAndInfixSymbols: Boolean = true,
     private fun TypeExpr?.printTypeAnnotation(): String = this?.let { ": " + it.print() } ?: ""
 
     fun Literal.print(firstOperand: Boolean = true): String = when (this) {
+        is Literal.BoolLiteral -> if (value) "true" else "false"
         is Literal.NumLiteral -> if (number.startsWith("-") && !firstOperand) "($number)" else number
         is Literal.StrLiteral -> "\"$string\""
         is Literal.ListLiteral -> "(" + elements.joinToString(", ") { it.print() } + ")"

@@ -150,4 +150,21 @@ class TestJVMCodegen {
         val outputDir = File("test_out/")
         emit(mod, outputDir)
     }
+
+    @Test
+    fun testLoop() {
+        val mod = module("TestLoop","""
+            fn z() => 1 + 2;
+            
+            fn f() -> I32 = {
+                while false do
+                    z()
+                ;
+                42
+            };
+        """.trimIndent())
+
+        val outputDir = File("test_out/")
+        emit(mod, outputDir)
+    }
 }

@@ -549,6 +549,13 @@ class BasicBlock internal constructor(
         pushStack(VerificationType.Float)
     }
 
+    fun drop_value(verificationType: VerificationType) {
+        assertNotFinalized()
+        popStack(verificationType)
+        // TODO use pop2 for 64 bit types
+        instruction(JVMInstruction.pop)
+    }
+
     fun return_void() {
         assertNotFinalized()
         if (outgoingFlow != null)
