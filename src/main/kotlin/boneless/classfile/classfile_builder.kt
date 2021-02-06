@@ -98,4 +98,18 @@ class ClassFileBuilder(val version: JavaVersion = lw2jvm, val className: String,
         val superIndex = constantClass(superName)
         return ClassFile(version, constantPool, accessFlags, thisIndex, superIndex, emptyList(), fields, methods, emptyList())
     }
+
+    fun getVerificationType(fieldDescriptor: FieldDescriptor) = when(fieldDescriptor) {
+        FieldDescriptor.BaseType.Z,
+        FieldDescriptor.BaseType.B,
+        FieldDescriptor.BaseType.C,
+        FieldDescriptor.BaseType.S,
+        FieldDescriptor.BaseType.I -> VerificationType.Integer
+        FieldDescriptor.BaseType.F -> VerificationType.Float
+        FieldDescriptor.BaseType.J -> VerificationType.Long
+        FieldDescriptor.BaseType.D -> VerificationType.Double
+        is FieldDescriptor.ReferenceType.NullableClassType -> VerificationType.Object(constantClass(fieldDescriptor.className).toInt())
+        is FieldDescriptor.ReferenceType.NullFreeClassType -> VerificationType.Object(constantClass(fieldDescriptor.className).toInt())
+        is FieldDescriptor.ReferenceType.ArrayType -> TODO()
+    }
 }

@@ -1,10 +1,7 @@
 package boneless.classfile
 
 import boneless.classfile.util.MethodBuilderDotPrinter
-import boneless.emit.getFieldDescriptor
-import boneless.emit.getMethodDescriptor
-import boneless.emit.getVerificationType
-import boneless.type.Type
+
 import java.io.ByteArrayOutputStream
 import java.io.DataOutputStream
 import java.io.Writer
@@ -256,10 +253,9 @@ class BasicBlock internal constructor(
         dos.writeShort(short.toInt())
     }
 
-    fun reserveVariable(t: Type): Int {
+    fun reserveVariable(vt: VerificationType): Int {
         assertNotFinalized()
-        val vt = classFileBuilder.getVerificationType(t)
-        locals = locals + listOf(vt ?: throw Exception("No reserving variables for zero-sized types: $t"))
+        locals = locals + listOf(vt)
         max_locals = max(max_locals, locals.size)
         return locals.size - 1
     }
@@ -375,30 +371,22 @@ class BasicBlock internal constructor(
         pushStack(VerificationType.Object(cc_index.toInt()))
     }
 
-    fun mutateSetFieldName(className: String, fieldName: String, memberType: Type, aggregateType: Type) {
+    fun mutateSetFieldName(className: String, fieldName: String, fieldDescriptor: FieldDescriptor, aggregateType: VerificationType) {
         assertNotFinalized()
-        val vmt = classFileBuilder.getVerificationType(memberType)  ?: throw Exception("Member type can't be zero sized: $aggregateType")
-        val vat = classFileBuilder.getVerificationType(aggregateType) ?: throw Exception("Aggregate type can't be zero sized: $aggregateType")
-        val fieldDescriptor = getFieldDescriptor(memberType)!!
+        val vmt = classFileBuilder.getVerificationType(fieldDescriptor)
         popStack(vmt)
-        popStack(vat)
+        popStack(aggregateType)
         instruction(JVMInstruction.withfield)
         immediate_short(classFileBuilder.constantFieldRef(className, fieldName, fieldDescriptor))
-        pushStack(vat)
+        pushStack(aggregateType)
     }
 
-    fun getField(className: String, fieldName: String, fieldType: Type) {
+    fun getField(className: String, fieldName: String, fieldDescriptor: FieldDescriptor) {
         assertNotFinalized()
         popStack(VerificationType.Object(classFileBuilder.constantClass(className).toInt()))
         instruction(JVMInstruction.getfield)
-        val fieldDescriptor = getFieldDescriptor(fieldType)  ?: throw Exception("Extracted field can't be zero sized: $fieldType")
         immediate_short(classFileBuilder.constantFieldRef(className, fieldName, fieldDescriptor))
-        pushStack(classFileBuilder.getVerificationType(fieldType)!!)
-    }
-
-    fun callStatic(className: String, methodName: String, methodType: Type.FnType) {
-        assertNotFinalized()
-        callStaticInternal(className, methodName, getMethodDescriptor(methodType), classFileBuilder.getVerificationType(methodType.codom))
+        pushStack(classFileBuilder.getVerificationType(fieldDescriptor))
     }
 
     /** Version that can call into foreign stuff with multiple args */
@@ -564,11 +552,10 @@ class BasicBlock internal constructor(
         outgoingFlow = BasicBlockOutFlow.FnReturn
     }
 
-    fun return_value(type: Type) {
+    fun return_value(vt: VerificationType) {
         assertNotFinalized()
         if (outgoingFlow != null)
             throw Exception("Can't set successor twice")
-        val vt = classFileBuilder.getVerificationType(type) ?: throw Exception("Return can't be zero sized: $type")
         popStack(vt)
         when(vt) {
             VerificationType.Integer -> instruction(JVMInstruction.ireturn)

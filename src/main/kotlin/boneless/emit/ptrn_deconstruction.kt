@@ -18,9 +18,10 @@ fun Emitter.registerPattern(map: MutableMap<Pattern, PutOnStack>, pattern: Patte
                     for ((i, subpattern) in pattern.elements.withIndex()) {
                         if (subpattern.type!! == unit_type())
                             continue
+                        val fieldDescriptor = getFieldDescriptor(subpattern.type!!)!!
                         val extract_element_procedure: PutOnStack = { builder ->
                             procedure(builder)
-                            builder.getField(mangled_datatype_name(type), "_$i", subpattern.type!!)
+                            builder.getField(mangled_datatype_name(type), "_$i", fieldDescriptor)
                         }
                         registerPattern(map, subpattern, extract_element_procedure)
                     }

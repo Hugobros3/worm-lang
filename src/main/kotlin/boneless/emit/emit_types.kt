@@ -63,20 +63,6 @@ fun ClassFileBuilder.getVerificationType(type: Type): VerificationType? = when(t
     Type.Top -> TODO()
 }
 
-fun ClassFileBuilder.getVerificationType(fieldDescriptor: FieldDescriptor) = when(fieldDescriptor) {
-    FieldDescriptor.BaseType.Z,
-    FieldDescriptor.BaseType.B,
-    FieldDescriptor.BaseType.C,
-    FieldDescriptor.BaseType.S,
-    FieldDescriptor.BaseType.I -> VerificationType.Integer
-    FieldDescriptor.BaseType.F -> VerificationType.Float
-    FieldDescriptor.BaseType.J -> VerificationType.Long
-    FieldDescriptor.BaseType.D -> VerificationType.Double
-    is FieldDescriptor.ReferenceType.NullableClassType -> VerificationType.Object(constantClass(fieldDescriptor.className).toInt())
-    is FieldDescriptor.ReferenceType.NullFreeClassType -> VerificationType.Object(constantClass(fieldDescriptor.className).toInt())
-    is FieldDescriptor.ReferenceType.ArrayType -> TODO()
-}
-
 fun Emitter.emit_datatype_classfile_if_needed(type: Type) {
     when (type) {
         is Type.PrimitiveType -> {}
@@ -111,14 +97,20 @@ fun Emitter.emit_datatype_classfile_if_needed(type: Type) {
 
                 val mangled_dt = mangled_datatype_name(type)
                 bb.pushDefaultValueType(mangled_dt)
+                val aggregateVt = builder.getVerificationType(type)!!
                 for ((i, elementType) in type.elements.withIndex()) {
                     if (elementType == unit_type())
                         continue
                     bb.loadVariable(params_vars[i]!!)
                     val fieldName = "_$i"
-                    bb.mutateSetFieldName(mangled_dt, fieldName, elementType, type)
+                    val fieldDescriptor = getFieldDescriptor(elementType)!!
+                    bb.mutateSetFieldName(mangled_dt, fieldName, fieldDescriptor, aggregateVt)
                 }
-                bb.return_value(type)
+                val returnVt = builder.getVerificationType(type)
+                if (returnVt != null)
+                    bb.return_value(returnVt)
+                else
+                    bb.return_void()
 
                 val attributes = functionEmitter.finish(null)
                 builder.method("<init>", initDescriptor, defaulMethodAccessFlags.copy(acc_static = true, acc_public = true), attributes)

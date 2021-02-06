@@ -53,7 +53,7 @@ class FunctionEmitter private constructor(private val emitter: Emitter, private 
         if (fn.body.type!! == unit_type()) {
             bb.return_void()
         } else {
-            bb.return_value(fnType.codom)
+            bb.return_value(cfBuilder.getVerificationType(fnType.codom) ?: throw Exception("Return can't be zero sized: ${fnType.codom}"))
         }
     }
 
@@ -93,14 +93,18 @@ class FunctionEmitter private constructor(private val emitter: Emitter, private 
                                 // TODO specialization garbage
                                 assert(r.def.typeParams.isEmpty())
                                 emit(expr.arg)
-                                bb.callStatic(r.def.module_, r.def.identifier, expr.callee.type as Type.FnType)
+                                val methodDescriptor = getMethodDescriptor((expr.callee.type as Type.FnType))
+                                val expectedReturn = cfBuilder.getVerificationType((expr.callee.type as Type.FnType).codom)
+                                bb.callStaticInternal(r.def.module_, r.def.identifier, methodDescriptor, expectedReturn)
                                 return
                             } else throw Exception("Can't call that def")
                         }
                         is TermLocation.BinderRef -> TODO()
                         is TermLocation.BuiltinFnRef -> {
                             emit(expr.arg)
-                            bb.callStatic("BuiltinFns", r.fn.name, r.fn.type)
+                            val methodDescriptor = getMethodDescriptor((r.fn.type as Type.FnType))
+                            val expectedReturn = cfBuilder.getVerificationType((r.fn.type as Type.FnType).codom)
+                            bb.callStaticInternal("BuiltinFns", r.fn.name, methodDescriptor, expectedReturn)
                             return
                         }
                         is TermLocation.TypeParamRef -> TODO()
@@ -110,7 +114,9 @@ class FunctionEmitter private constructor(private val emitter: Emitter, private 
                             val def = r.def
                             if (def.body is Def.DefBody.Contract) {
                                 emit(expr.arg)
-                                bb.callStatic(mangled_contract_instance_name(def.identifier, expr.callee.expression.deducedImplicitSpecializationArguments!!), expr.callee.id, expr.callee.type as Type.FnType)
+                                val methodDescriptor = getMethodDescriptor((expr.callee.type as Type.FnType))
+                                val expectedReturn = cfBuilder.getVerificationType((expr.callee.type as Type.FnType).codom)
+                                bb.callStaticInternal(mangled_contract_instance_name(def.identifier, expr.callee.expression.deducedImplicitSpecializationArguments!!), expr.callee.id, methodDescriptor, expectedReturn)
                                 return
                             }
                         }
@@ -179,13 +185,21 @@ class FunctionEmitter private constructor(private val emitter: Emitter, private 
     fun emit(instruction: Instruction) {
         when(instruction) {
             is Instruction.Let -> {
-                val argument_local_var = bb.reserveVariable(instruction.pattern.type!!)
-
-                emit(instruction.body)
-                bb.setVariable(argument_local_var)
-                val procedure: PutOnStack = {
-                    bb.loadVariable(argument_local_var)
+                val vt = cfBuilder.getVerificationType(instruction.pattern.type!!)
+                val procedure: PutOnStack = if (vt != null) {
+                    val localVar = bb.reserveVariable(vt)
+                    emit(instruction.body)
+                    bb.setVariable(localVar)
+                    ({
+                        it.loadVariable(localVar)
+                    })
+                } else {
+                    emit(instruction.body)
+                    ({
+                        // fuckall, it is void !
+                    })
                 }
+
                 val m = mutableMapOf<Pattern, PutOnStack>()
                 emitter.registerPattern(m, instruction.pattern, procedure)
                 patternsAccess += m

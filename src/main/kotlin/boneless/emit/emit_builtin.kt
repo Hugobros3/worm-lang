@@ -18,8 +18,10 @@ fun Emitter.emit_builtin_fn_classfile(): ClassFile {
         fun access_arg_extract(n: Int) {
             access_arg()
             val arg_type: Type = (argsType as Type.TupleType).elements[n]
-            fnEmitter.bb.getField(mangled_datatype_name(argsType), "_$n", arg_type)
+            fnEmitter.bb.getField(mangled_datatype_name(argsType), "_$n", getFieldDescriptor(arg_type)!!)
         }
+        
+        val return_vt = cfBuilder.getVerificationType(builtin.type.codom) ?: throw Exception("Return can't be zero sized: ${builtin.type.codom}")
 
         fun branchWrapper(branchType: BranchType) {
             val ifTrueBB = fnEmitter.builder.basicBlock(fnEmitter.bb)
@@ -28,9 +30,9 @@ fun Emitter.emit_builtin_fn_classfile(): ClassFile {
             access_arg_extract(1)
 
             ifTrueBB.pushInt(1)
-            ifTrueBB.return_value(builtin.type.codom)
+            ifTrueBB.return_value(return_vt)
             ifFalseBB.pushInt(0)
-            ifFalseBB.return_value(builtin.type.codom)
+            ifFalseBB.return_value(return_vt)
             fnEmitter.bb.branch(branchType, ifTrueBB, ifFalseBB)
         }
 
@@ -39,96 +41,96 @@ fun Emitter.emit_builtin_fn_classfile(): ClassFile {
                 access_arg_extract(0)
                 access_arg_extract(1)
                 fnEmitter.bb.add_i32()
-                fnEmitter.bb.return_value(builtin.type.codom)
+                fnEmitter.bb.return_value(return_vt)
             }
             BuiltinFn.jvm_sub_i32 -> {
                 access_arg_extract(0)
                 access_arg_extract(1)
                 fnEmitter.bb.sub_i32()
-                fnEmitter.bb.return_value(builtin.type.codom)
+                fnEmitter.bb.return_value(return_vt)
             }
             BuiltinFn.jvm_mul_i32 -> {
                 access_arg_extract(0)
                 access_arg_extract(1)
                 fnEmitter.bb.mul_i32()
-                fnEmitter.bb.return_value(builtin.type.codom)
+                fnEmitter.bb.return_value(return_vt)
             }
             BuiltinFn.jvm_div_i32 -> {
                 access_arg_extract(0)
                 access_arg_extract(1)
                 fnEmitter.bb.div_i32()
-                fnEmitter.bb.return_value(builtin.type.codom)
+                fnEmitter.bb.return_value(return_vt)
             }
             BuiltinFn.jvm_mod_i32 -> {
                 access_arg_extract(0)
                 access_arg_extract(1)
                 fnEmitter.bb.mod_i32()
-                fnEmitter.bb.return_value(builtin.type.codom)
+                fnEmitter.bb.return_value(return_vt)
             }
             BuiltinFn.jvm_neg_i32 -> {
                 access_arg()
                 fnEmitter.bb.neg_i32()
-                fnEmitter.bb.return_value(builtin.type.codom)
+                fnEmitter.bb.return_value(return_vt)
             }
             BuiltinFn.jvm_add_f32 -> {
                 access_arg_extract(0)
                 access_arg_extract(1)
                 fnEmitter.bb.add_f32()
-                fnEmitter.bb.return_value(builtin.type.codom)
+                fnEmitter.bb.return_value(return_vt)
             }
             BuiltinFn.jvm_sub_f32 -> {
                 access_arg_extract(0)
                 access_arg_extract(1)
                 fnEmitter.bb.sub_f32()
-                fnEmitter.bb.return_value(builtin.type.codom)
+                fnEmitter.bb.return_value(return_vt)
             }
             BuiltinFn.jvm_mul_f32 -> {
                 access_arg_extract(0)
                 access_arg_extract(1)
                 fnEmitter.bb.mul_f32()
-                fnEmitter.bb.return_value(builtin.type.codom)
+                fnEmitter.bb.return_value(return_vt)
             }
             BuiltinFn.jvm_div_f32 -> {
                 access_arg_extract(0)
                 access_arg_extract(1)
                 fnEmitter.bb.div_f32()
-                fnEmitter.bb.return_value(builtin.type.codom)
+                fnEmitter.bb.return_value(return_vt)
             }
             BuiltinFn.jvm_mod_f32 -> {
                 access_arg_extract(0)
                 access_arg_extract(1)
                 fnEmitter.bb.mod_f32()
-                fnEmitter.bb.return_value(builtin.type.codom)
+                fnEmitter.bb.return_value(return_vt)
             }
             BuiltinFn.jvm_neg_f32 -> {
                 access_arg()
                 fnEmitter.bb.neg_f32()
-                fnEmitter.bb.return_value(builtin.type.codom)
+                fnEmitter.bb.return_value(return_vt)
             }
             BuiltinFn.jvm_and_bool -> {
                 access_arg_extract(0)
                 access_arg_extract(1)
                 fnEmitter.bb.and_i32()
-                fnEmitter.bb.return_value(builtin.type.codom)
+                fnEmitter.bb.return_value(return_vt)
             }
             BuiltinFn.jvm_or_bool  -> {
                 access_arg_extract(0)
                 access_arg_extract(1)
                 fnEmitter.bb.or_i32()
-                fnEmitter.bb.return_value(builtin.type.codom)
+                fnEmitter.bb.return_value(return_vt)
             }
             BuiltinFn.jvm_xor_bool -> {
                 access_arg_extract(0)
                 access_arg_extract(1)
                 fnEmitter.bb.xor_i32()
-                fnEmitter.bb.return_value(builtin.type.codom)
+                fnEmitter.bb.return_value(return_vt)
             }
             BuiltinFn.jvm_not_bool -> {
                 // JVM doesn't have "not"
                 access_arg()
                 fnEmitter.bb.pushInt(1)
                 fnEmitter.bb.xor_i32()
-                fnEmitter.bb.return_value(builtin.type.codom)
+                fnEmitter.bb.return_value(return_vt)
             }
             BuiltinFn.jvm_infeq_i32 -> { branchWrapper(BranchType.ICMP_LESS_EQUAL) }
             BuiltinFn.jvm_inf_i32 -> { branchWrapper(BranchType.ICMP_LESS) }
@@ -146,9 +148,9 @@ fun Emitter.emit_builtin_fn_classfile(): ClassFile {
                 fnEmitter.bb.branch(BranchType.IF_GREATER_EQUAL, ifTrueBB, ifFalseBB)
 
                 ifTrueBB.pushInt(1)
-                ifTrueBB.return_value(builtin.type.codom)
+                ifTrueBB.return_value(return_vt)
                 ifFalseBB.pushInt(0)
-                ifFalseBB.return_value(builtin.type.codom)
+                ifFalseBB.return_value(return_vt)
             }
             BuiltinFn.jvm_inf_f32 -> {
                 val ifTrueBB = fnEmitter.builder.basicBlock(fnEmitter.bb)
@@ -160,9 +162,9 @@ fun Emitter.emit_builtin_fn_classfile(): ClassFile {
                 fnEmitter.bb.branch(BranchType.IF_GREATER, ifTrueBB, ifFalseBB)
 
                 ifTrueBB.pushInt(1)
-                ifTrueBB.return_value(builtin.type.codom)
+                ifTrueBB.return_value(return_vt)
                 ifFalseBB.pushInt(0)
-                ifFalseBB.return_value(builtin.type.codom)
+                ifFalseBB.return_value(return_vt)
             }
             BuiltinFn.jvm_eq_f32 -> {
                 val ifTrueBB = fnEmitter.builder.basicBlock(fnEmitter.bb)
@@ -174,9 +176,9 @@ fun Emitter.emit_builtin_fn_classfile(): ClassFile {
                 fnEmitter.bb.branch(BranchType.IF_EQ, ifTrueBB, ifFalseBB)
 
                 ifTrueBB.pushInt(1)
-                ifTrueBB.return_value(builtin.type.codom)
+                ifTrueBB.return_value(return_vt)
                 ifFalseBB.pushInt(0)
-                ifFalseBB.return_value(builtin.type.codom)
+                ifFalseBB.return_value(return_vt)
             }
             BuiltinFn.jvm_neq_f32 -> {
                 val ifTrueBB = fnEmitter.builder.basicBlock(fnEmitter.bb)
@@ -188,9 +190,9 @@ fun Emitter.emit_builtin_fn_classfile(): ClassFile {
                 fnEmitter.bb.branch(BranchType.IF_EQ, ifTrueBB, ifFalseBB)
 
                 ifTrueBB.pushInt(0)
-                ifTrueBB.return_value(builtin.type.codom)
+                ifTrueBB.return_value(return_vt)
                 ifFalseBB.pushInt(1)
-                ifFalseBB.return_value(builtin.type.codom)
+                ifFalseBB.return_value(return_vt)
             }
             BuiltinFn.jvm_grt_f32 -> {
                 val ifTrueBB = fnEmitter.builder.basicBlock(fnEmitter.bb)
@@ -202,9 +204,9 @@ fun Emitter.emit_builtin_fn_classfile(): ClassFile {
                 fnEmitter.bb.branch(BranchType.IF_GREATER, ifTrueBB, ifFalseBB)
 
                 ifTrueBB.pushInt(1)
-                ifTrueBB.return_value(builtin.type.codom)
+                ifTrueBB.return_value(return_vt)
                 ifFalseBB.pushInt(0)
-                ifFalseBB.return_value(builtin.type.codom)
+                ifFalseBB.return_value(return_vt)
             }
             BuiltinFn.jvm_grteq_f32 -> {
                 val ifTrueBB = fnEmitter.builder.basicBlock(fnEmitter.bb)
@@ -216,9 +218,9 @@ fun Emitter.emit_builtin_fn_classfile(): ClassFile {
                 fnEmitter.bb.branch(BranchType.IF_GREATER_EQUAL, ifTrueBB, ifFalseBB)
 
                 ifTrueBB.pushInt(1)
-                ifTrueBB.return_value(builtin.type.codom)
+                ifTrueBB.return_value(return_vt)
                 ifFalseBB.pushInt(0)
-                ifFalseBB.return_value(builtin.type.codom)
+                ifFalseBB.return_value(return_vt)
 
             }
             else -> throw Exception("Missing codegen for intrinsic ${builtin}")
