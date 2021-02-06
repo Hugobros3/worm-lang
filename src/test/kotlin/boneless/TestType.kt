@@ -17,7 +17,9 @@ class TestType {
         type(module)
 
         val module_serialized = module.prettyPrint(printInferredTypes = false)
+        val module_serialized2 = module.prettyPrint(printInferredTypes = true)
         println(module_serialized)
+        println(module_serialized2)
     }
 
     @Test
@@ -253,6 +255,20 @@ class TestType {
             
             fn f() => {
                 Foo.fooerize 96
+            };
+        """.trimIndent())
+    }
+
+    @Test
+    fun testTypeArgsInferenceReverse() {
+        testType("""
+            forall T
+            contract random = fn [] -> T;
+            
+            instance random::I32 = fn () => 5; // chosen by dice roll, guaranteed to be fair
+            
+            fn f() => {
+                let x: I32 = random();
             };
         """.trimIndent())
     }

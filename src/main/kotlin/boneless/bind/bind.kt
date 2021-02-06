@@ -30,6 +30,7 @@ fun get_def(loc: TermLocation): Def? = when (loc) {
     is TermLocation.DefRef -> loc.def
     else -> null
 }
+fun get_def(e: Expression) = (e as? Expression.IdentifierRef)?.id?.resolved?.let { get_def(it) }
 
 fun bind(module: Module) {
     for (def in module.defs) {

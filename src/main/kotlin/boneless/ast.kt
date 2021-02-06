@@ -1,7 +1,6 @@
 package boneless
 
 import boneless.bind.BindPoint
-import boneless.core.BuiltinFn
 import boneless.type.PrimitiveTypeEnum
 import boneless.type.Type
 import boneless.type.Typeable
@@ -27,7 +26,7 @@ data class Def(val identifier: Identifier, val body: DefBody, val typeParamsName
     }
 
     val is_type: Boolean = body is DefBody.TypeAlias
-    lateinit var typeParams: List<Type>
+    lateinit var typeParams: List<Type.TypeParam>
 }
 
 sealed class Instruction {
@@ -62,14 +61,17 @@ sealed class Expression : Typeable by typeable() {
 
     data class IdentifierRef(val id: BindPoint) : Expression() {
         /** Inferred by the type checker */
-        var deducedImplicitSpecializationArguments: List<Type>? = null
+        var deducedImplicitSpecializationArguments2: List<Type>? = null
+        var deducedImplicitSpecializationArguments: Map<Type.TypeParam, Type>? = null
+        override fun toString() = "IdentifierRef(id=$id, deduced=$deducedImplicitSpecializationArguments2)"
     }
     data class ExprSpecialization(val target: IdentifierRef, val arguments: List<TypeExpr>) : Expression()
 
-    data class ListExpression(val elements: List<Expression>, val is_synthesized_invocation_argument_list: Boolean = false) : Expression()
+    data class ListExpression(val elements: List<Expression>, /** set by parser */val is_synthesized_invocation_argument_list: Boolean = false) : Expression()
     data class RecordExpression(val fields: List<Pair<Identifier, Expression>>) : Expression()
 
-    data class Projection(val expression: Expression, val id: /** not a bind point because only the type checker can figure it out */Identifier) : Expression()
+    /** id is not a bind point because only the type checker can figure it out */
+    data class Projection(val expression: Expression, val id: Identifier) : Expression()
 
     data class Invocation(val callee: Expression, val arg: Expression) : Expression()
     data class Function(val param: Pattern, val body: Expression, val returnTypeAnnotation: TypeExpr? = null) : Expression()
@@ -86,7 +88,9 @@ sealed class Expression : Typeable by typeable() {
 
 sealed class TypeExpr {
     data class PrimitiveType(val primitiveType: PrimitiveTypeEnum) : TypeExpr()
-    data class TypeNameRef(val callee: BindPoint) : TypeExpr()
+    data class TypeNameRef(val callee: BindPoint) : TypeExpr() {
+        // TODO implicit specialization
+    }
     data class TypeSpecialization(val target: TypeNameRef, val arguments: List<TypeExpr>) : TypeExpr()
     data class RecordType(val elements: List<Pair<Identifier, TypeExpr>>) : TypeExpr()
     data class TupleType(val elements: List<TypeExpr>) : TypeExpr()

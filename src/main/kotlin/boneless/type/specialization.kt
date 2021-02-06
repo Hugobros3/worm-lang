@@ -5,7 +5,7 @@ import boneless.bind.TermLocation
 import boneless.bind.get_def
 import boneless.util.prettyPrint
 
-fun specializeType(type: Type, substitutions: Map<Type, Type>): Type = when {
+fun specializeType(type: Type, substitutions: Map<Type.TypeParam, Type>): Type = when {
     substitutions.contains(type) -> substitutions[type]!!
     type is Type.RecordType -> type.copy(elements = type.elements.map { (n, t) -> Pair(n, specializeType(t, substitutions)) })
     type is Type.TupleType -> type.copy(elements = type.elements.map { specializeType(it, substitutions) })
@@ -32,40 +32,55 @@ fun findTypeParams(type: Type): List<TermLocation.TypeParamRef> = when(type) {
     is Type.Top -> emptyList()
 }
 
-/** Heuristic used to auto-infer type params in certain situations */
-fun needTypeParamInference(expr: Expression): Boolean = when(expr) {
-    is Expression.QuoteLiteral -> false
-    is Expression.QuoteType -> TODO()
-    is Expression.IdentifierRef -> {
-        val def = get_def(expr.id.resolved)
-        def?.typeParamsNames?.isNotEmpty() ?: false
+fun unify(type: Type, expected: Type): Map<Type.TypeParam, Type> {
+    assert(findTypeParams(expected).isEmpty())
+    return unify_(type, expected)
+}
+
+// assumes 'expected' does not feature type parameters itself
+private fun unify_(type: Type, expected: Type): Map<Type.TypeParam, Type> {
+    return when {
+        isSubtype(type, expected) -> emptyMap()
+        type is Type.TypeParam -> mapOf(type to expected)
+        type is Type.FnType && expected is Type.FnType -> mergeConstraints(
+            unify(type.dom, expected.dom),
+            unify(type.codom, expected.codom)
+        )
+        type is Type.TupleType && expected is Type.TupleType -> type.elements.zip(expected.elements)
+            .map { (l, r) -> unify(l, r) }.fold(emptyMap(), ::mergeConstraints)
+        else -> TODO()
+        /*type is Type.PrimitiveType -> TODO()
+        type is Type.RecordType -> TODO()
+        type is Type.ArrayType -> TODO()
+        type is Type.EnumType -> TODO()
+        type is Type.NominalType -> TODO()*/
     }
-    is Expression.ExprSpecialization -> false
-    is Expression.Projection -> needTypeParamInference(expr.expression)
-    else -> false
 }
 
-fun unify(type: Type, expected: Type): Map<Type, Type> = when {
-    expected is Type.Top -> emptyMap()
-    type is Type.TypeParam -> mapOf(type to expected)
-    type is Type.FnType && expected is Type.FnType -> unifyConstraints(unify(type.dom, expected.dom), unify(type.codom, expected.codom))
-    type is Type.TupleType && expected is Type.TupleType -> type.elements.zip(expected.elements).map { (l, r) -> unify(l, r) }.fold(emptyMap(), ::unifyConstraints)
-    else -> TODO()
-    /*type is Type.PrimitiveType -> TODO()
-    type is Type.RecordType -> TODO()
-    type is Type.ArrayType -> TODO()
-    type is Type.EnumType -> TODO()
-    type is Type.NominalType -> TODO()
-    type == Type.Top -> TODO()*/
-}
-
-fun unifyConstraints(a: Map<Type, Type>, b: Map<Type, Type>): MutableMap<Type, Type> {
-    val m = mutableMapOf<Type, Type>()
-    for (c in a.toList() + b.toList()) {
-        val (from, to) = c
-        if (m[from] != null && m[from] != to)
+fun mergeConstraints(a: Map<Type.TypeParam, Type>, b: Map<Type.TypeParam, Type>): MutableMap<Type.TypeParam, Type> {
+    val merged = mutableMapOf<Type.TypeParam, Type>()
+    for (constraint in a.toList() + b.toList()) {
+        val (from, to) = constraint
+        if (merged[from] != null && merged[from] != to)
             throw Exception("Can't unify")
-        m[from] = to
+        merged[from] = to
     }
-    return m
+    return merged
 }
+
+fun create_visitor_for_unification_constraints(constraints: Map<Type.TypeParam, Type>) = default_visit_all_typeable_visitor.copy(
+    exprVisitor = {
+        if (it is Expression.IdentifierRef) {
+            val def = get_def(it)
+            if (def != null) {
+                if (def.typeParams.isNotEmpty()) {
+                    assert(it.deducedImplicitSpecializationArguments == null)
+                    it.deducedImplicitSpecializationArguments2 = def.typeParams.map { constraints[it]!! }
+                    it.deducedImplicitSpecializationArguments = constraints.filter { it.key in def.typeParams }
+                }
+            }
+        }
+        true
+    },
+    // TODO implicit specialization for typeExprs & patterns
+)

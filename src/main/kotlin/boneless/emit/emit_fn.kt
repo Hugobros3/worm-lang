@@ -116,7 +116,7 @@ class FunctionEmitter private constructor(private val emitter: Emitter, private 
                                 emit(expr.arg)
                                 val methodDescriptor = getMethodDescriptor((expr.callee.type as Type.FnType))
                                 val expectedReturn = cfBuilder.getVerificationType((expr.callee.type as Type.FnType).codom)
-                                bb.callStaticInternal(mangled_contract_instance_name(def.identifier, expr.callee.expression.deducedImplicitSpecializationArguments!!), expr.callee.id, methodDescriptor, expectedReturn)
+                                bb.callStaticInternal(mangled_contract_instance_name(def.identifier, expr.callee.expression.deducedImplicitSpecializationArguments2!!), expr.callee.id, methodDescriptor, expectedReturn)
                                 return
                             }
                         }
@@ -142,7 +142,7 @@ class FunctionEmitter private constructor(private val emitter: Emitter, private 
                 bb = after_seq
             }
             is Expression.Conditional -> {
-                val yieldType = expr.type!!
+                val yieldType = expr.type
                 val additionalStack = listOf(cfBuilder.getVerificationType(yieldType)).filterNotNull()
                 val ifTrueBB = builder.basicBlock(bb, bbName = "ifTrue")
                 val ifFalseBB = builder.basicBlock(bb, bbName = "ifFalse")

@@ -3,7 +3,9 @@ package boneless.type
 import boneless.*
 import boneless.bind.TermLocation
 import boneless.bind.get_def
+import boneless.util.Visitors
 import boneless.util.prettyPrint
+import boneless.util.visitAST
 
 fun Type.normalize(): Type = when {
     // tuples of size 1 do not exist
@@ -19,7 +21,7 @@ fun type(module: Module) {
 
 interface Typeable {
     val type: Type
-    fun set_type(type: Type)
+    fun set_type(type: Type?)
     val is_typed_yet: Boolean
 }
 
@@ -29,8 +31,8 @@ fun typeable() = object : Typeable {
     override val type: Type
         get() = _type ?: throw Exception("Type isn't set yet")
 
-    override fun set_type(type: Type) {
-        if (_type != null)
+    override fun set_type(type: Type?) {
+        if (_type != null && type != null)
             throw Exception("Attempted to set type twice")
         _type = type
     }
@@ -42,7 +44,6 @@ fun typeable() = object : Typeable {
 class TypeChecker(val module: Module) {
     val stack = mutableListOf<Frame>()
     class Frame(val def: Def)
-    val assumptions = mutableMapOf<Def, Type>()
 
     private fun cannot_infer(node: Typeable): Nothing {
         throw Exception("Cannot infer $node")
@@ -147,9 +148,7 @@ class TypeChecker(val module: Module) {
                     infer(body.fn)
                 else {
                     val resolved = resolveTypeExpression(body.annotatedType)
-                    assumptions[def] = resolved
                     val inferred = infer(body.fn) as Type.FnType
-                    assumptions.remove(def)
                     expect(inferred.codom, resolved)
                     inferred
                 }
@@ -163,15 +162,8 @@ class TypeChecker(val module: Module) {
 
                 body.arguments = body.argumentsExpr.map { resolveTypeExpression(it) }
 
-                val substitutions = contract_def.typeParamsNames.mapIndexed { i, _ ->
-                    Pair(
-                        Type.TypeParam(
-                            TermLocation.TypeParamRef(
-                                contract_def,
-                                i
-                            )
-                        ) as Type, body.arguments[i]
-                    )
+                val substitutions = contract_def.typeParamsNames.mapIndexed {
+                        i, _ -> Pair(Type.TypeParam(TermLocation.TypeParamRef(contract_def, i)), body.arguments[i])
                 }.toMap()
 
                 val specializedType = specializeType(contract_type, substitutions)
@@ -188,7 +180,12 @@ class TypeChecker(val module: Module) {
             is Expression.QuoteType -> TODO()
             is Expression.IdentifierRef -> {
                 when (val r = expr.id.resolved) {
-                    is TermLocation.DefRef -> infer_def_lazily(r.def)
+                    is TermLocation.DefRef -> {
+                        if (expr.deducedImplicitSpecializationArguments != null)
+                            specializeType(infer_def_lazily(r.def), expr.deducedImplicitSpecializationArguments!!)
+                        else
+                            infer_def_lazily(r.def)
+                    }
                     is TermLocation.BinderRef -> r.binder.type
                     is TermLocation.BuiltinFnRef -> r.fn.type
                     is TermLocation.TypeParamRef -> Type.TypeParam(r)
@@ -200,19 +197,17 @@ class TypeChecker(val module: Module) {
             }
             is Expression.ExprSpecialization -> {
                 infer(expr.target)
-                val def = (expr.target.id.resolved as? TermLocation.DefRef)?.def
-                    ?: throw Exception("Can only specialize defs")
+                val def = get_def(expr.target) ?: throw Exception("Can only specialize defs")
                 if (def.typeParamsNames.size != expr.arguments.size)
                     throw Exception("Given ${expr.arguments} arguments but ${def.identifier} only has ${def.typeParamsNames.size} type arguments")
 
                 val typeArguments = expr.arguments.map { resolveTypeExpression(it) }
 
-                if (def.body is Def.DefBody.Contract) findInstance(module, def, typeArguments)
-                        ?: throw Exception("No instance for contract ${def.identifier} with type arguments ${typeArguments.map { it.prettyPrint() }}")
+                if (def.body is Def.DefBody.Contract) findInstance(module, def, typeArguments) ?: throw Exception("No instance for contract ${def.identifier} with type arguments ${typeArguments.map { it.prettyPrint() }}")
 
                 val genericType = infer_def_lazily(def)
                 val substitutions = def.typeParamsNames.mapIndexed { i, _ ->
-                    Pair(Type.TypeParam(TermLocation.TypeParamRef(def, i)) as Type, typeArguments[i])
+                    Pair(Type.TypeParam(TermLocation.TypeParamRef(def, i)), typeArguments[i])
                 }.toMap()
                 specializeType(genericType, substitutions)
             }
@@ -229,37 +224,46 @@ class TypeChecker(val module: Module) {
                 Type.RecordType(inferred)
             }
             is Expression.Invocation -> {
-                if (needTypeParamInference(expr.callee)) {
-                    val argsType = infer(expr.arg)
-                    val targetType = check(expr.callee, Type.FnType(argsType, Type.Top))
-                    if (targetType !is Type.FnType)
-                        throw Exception("invocation callee is not a function $targetType")
-                    targetType.codom
-                } else {
-                    var suggestedType: Type.FnType? = null
-                    if (expr.callee is Expression.IdentifierRef) {
-                        val def = get_def(expr.callee.id.resolved)
-                        val body = def?.body
-                        val assumedRet = assumptions[def]
-                        if (body is Def.DefBody.FnBody && assumedRet != null) {
-                            val completeType = Type.FnType(body.fn.param.type, assumedRet)
-                            expr.callee.set_type(completeType)
-                            suggestedType = completeType
+                val argType = infer(expr.arg)
+                if (expr.callee is Expression.IdentifierRef) {
+                    val def = get_def(expr.callee)
+                    if (def?.body is Def.DefBody.FnBody) {
+                        val body = def.body as Def.DefBody.FnBody
+                        if (body.annotatedType != null) {
+                            // First time encountering this ?
+                            if (!body.fn.param.is_typed_yet)
+                                infer_def_lazily(def)
+                            assert(body.fn.param.is_typed_yet)
+
+                            val dom = body.fn.param.type
+                            val codom = resolveTypeExpression(body.annotatedType)
+                            expect(argType, dom)
+                            expr.callee.set_type(Type.FnType(dom, codom))
+                            return codom
                         }
                     }
-
-                    val targetType = suggestedType ?: infer(expr.callee)
-                    if (targetType !is Type.FnType)
-                        throw Exception("invocation callee is not a function $targetType")
-
-                    if (targetType.containsUnboundTypeParams()) {
-                        assert(false)
-                    }
-
-                    val argsType = infer(expr.arg)
-                    expect_subtype(argsType, targetType.dom)
-                    targetType.codom
                 }
+
+                var targetType = infer(expr.callee)
+                if (targetType !is Type.FnType)
+                    throw Exception("invocation callee is not a function $targetType")
+
+                val unbound = targetType.getUnboundTypeParams()
+                if (unbound.isNotEmpty()) {
+                    reset_types(expr.callee)
+                    val unified = unify(targetType.dom, argType)
+                    println(unified)
+
+                    val visitor = create_visitor_for_unification_constraints(unified)
+                    visitAST(expr.callee, visitor)
+                    println(expr.callee)
+
+                    targetType = infer(expr.callee) as Type.FnType
+                    assert(targetType.getUnboundTypeParams().isEmpty()) { targetType }
+                }
+
+                coerce(expr.arg, argType, targetType.dom)
+                targetType.codom
             }
             is Expression.Function -> {
                 val dom = infer(expr.param)
@@ -299,50 +303,10 @@ class TypeChecker(val module: Module) {
             is Expression.QuoteLiteral -> checkValue(expr.literal, expected_type)
             is Expression.QuoteType -> TODO()
             is Expression.IdentifierRef -> {
-                expect(
-                    when (val r = expr.id.resolved) {
-                        is TermLocation.DefRef -> {
-                            val t = infer_def_lazily(r.def)
-                            val def = r.def
-                            if (def.typeParamsNames.isNotEmpty()) {
-                                val substitutions = unify(t, expected_type)
-                                val st = specializeType(t, substitutions)
-                                val typeArguments = def.typeParams.map { substitutions[it]!! }
-                                expr.deducedImplicitSpecializationArguments = typeArguments
-                                if (def.body is Def.DefBody.Contract)
-                                    findInstance(module, def, typeArguments) ?: throw Exception("No instance for contract ${def.identifier} with type arguments ${typeArguments.map { it.prettyPrint() }}")
-                                return coerce(expr, st, expected_type)
-                            }
-                            t
-                        }
-                        is TermLocation.BinderRef -> r.binder.type
-                        is TermLocation.BuiltinFnRef -> r.fn.type
-                        is TermLocation.TypeParamRef -> Type.TypeParam(r)
-                    }, expected_type
-                )
-                expected_type
+                val inferred = inferExpr(expr)
+                coerce(expr, inferred, expected_type)
             }
-            is Expression.Projection -> {
-                val t = inferExpr(expr)
-
-                if (expr.expression is Expression.IdentifierRef) {
-                    val def = get_def(expr.expression.id.resolved)
-                    if (def != null && def.typeParamsNames.isNotEmpty()) {
-                        val substitutions = unify(t, expected_type)
-                        val st = specializeType(t, substitutions)
-                        val typeArguments = def.typeParams.map { substitutions[it]!! }
-                        expr.expression.deducedImplicitSpecializationArguments = typeArguments
-
-                        if (def.body is Def.DefBody.Contract)
-                            findInstance(module, def, typeArguments) ?: throw Exception("No instance for contract ${def.identifier} with type arguments ${typeArguments.map { it.prettyPrint() }}")
-
-                        return coerce(expr.expression, st, expected_type)
-                    }
-                }
-
-                expect(t, expected_type)
-                t
-            }
+            is Expression.Projection,
             is Expression.ExprSpecialization -> {
                 val t = inferExpr(expr)
                 expect(t, expected_type)
@@ -369,21 +333,28 @@ class TypeChecker(val module: Module) {
                 Type.RecordType(checked)
             }
             is Expression.Invocation -> {
-                if (needTypeParamInference(expr.callee)) {
-                    val argsType = infer(expr.arg)
-                    val targetType = check(expr.callee, Type.FnType(argsType, Type.Top))
-                    if (targetType !is Type.FnType)
-                        throw Exception("invocation callee is not a function $targetType")
-                    expect(targetType.codom, expected_type)
-                    targetType.codom
-                } else {
-                    val targetType = infer(expr.callee)
-                    if (targetType !is Type.FnType)
-                        type_error("invocation callee is not a function $targetType")
-                    check(expr.arg, targetType.dom)
-                    expect(targetType.codom, expected_type)
-                    targetType.codom
+                val argType = infer(expr.arg)
+                var targetType = infer(expr.callee)
+                if (targetType !is Type.FnType)
+                    type_error("invocation callee is not a function $targetType")
+
+                val unbound = targetType.getUnboundTypeParams()
+                if (unbound.isNotEmpty()) {
+                    reset_types(expr.callee)
+                    val unified = mergeConstraints(unify(targetType.dom, argType), unify(targetType.codom, expected_type))
+                    println(unified)
+
+                    val visitor = create_visitor_for_unification_constraints(unified)
+                    visitAST(expr.callee, visitor)
+                    println(expr.callee)
+
+                    targetType = infer(expr.callee) as Type.FnType
+                    assert(targetType.getUnboundTypeParams().isEmpty()) { targetType }
                 }
+
+                coerce(expr.arg, argType, targetType.dom)
+                expect(targetType.codom, expected_type)
+                targetType.codom
             }
             is Expression.Function -> {
                 if (expected_type !is Type.FnType)
@@ -463,11 +434,7 @@ class TypeChecker(val module: Module) {
             is Pattern.ListPattern -> {
                 val inferred = pattern.elements.map { infer(it) }
                 assert(inferred.size > 1)
-                when {
-                    //inferred.isEmpty() -> unit_type()
-                    //inferred.all { it == inferred[0] } -> Type.ArrayType(inferred[0], inferred.size)
-                    else -> Type.TupleType(inferred)
-                }
+                Type.TupleType(inferred)
             }
             is Pattern.RecordPattern -> {
                 val inferred = pattern.fields.map { (f, p) -> Pair(f, infer(p)) }
@@ -631,7 +598,7 @@ class TypeChecker(val module: Module) {
                 findInstance(module, def, typeArguments) ?: throw Exception("No instance for contract ${def.identifier} with type arguments ${typeArguments.map { it.prettyPrint() }}")
 
             val substitutions = def.typeParamsNames.mapIndexed { i, _ ->
-                Pair(Type.TypeParam(TermLocation.TypeParamRef(def, i)) as Type, typeArguments[i])
+                Pair(Type.TypeParam(TermLocation.TypeParamRef(def, i)), typeArguments[i])
             }.toMap()
             specializeType(genericType, substitutions)
         }
@@ -677,13 +644,52 @@ class TypeChecker(val module: Module) {
         }
     }
 
-    fun Type.containsUnboundTypeParams(): Boolean {
+    fun Type.getUnboundTypeParams(): List<TermLocation.TypeParamRef> {
+        val filtered = mutableListOf<TermLocation.TypeParamRef>()
         val typeParams = findTypeParams(this)
         for (tp in typeParams) {
             val currentDef = current_frame().def
             if (tp.def != currentDef)
-                return true
+                filtered.add(tp)
         }
-        return false
+        return filtered
     }
 }
+
+val default_visit_all_typeable_visitor: Visitors = Visitors(
+    exprVisitor = {
+        true
+    },
+    instructionVisitor = {
+        true
+    },
+    typeExprVisitor = {
+        // TODO: Review if adding dependent types
+        false
+    },
+    patternVisitor = {
+        true
+    },
+    literalVisitor = {
+        true
+    }
+)
+
+fun reset_types(expr: Expression) = visitAST(expr, reset_types_visitors)
+val reset_types_visitors: Visitors = default_visit_all_typeable_visitor.copy(
+    exprVisitor = {
+        it.set_type(null)
+        true
+    },
+    instructionVisitor = {
+        true
+    },
+    patternVisitor = {
+        it.set_type(null)
+        true
+    },
+    literalVisitor = {
+        it.set_type(null)
+        true
+    }
+)
