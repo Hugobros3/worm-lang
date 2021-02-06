@@ -8,6 +8,7 @@ import boneless.bind.TermLocation
 import boneless.classfile.*
 import boneless.type.Type
 import boneless.type.unit_type
+import java.io.Writer
 
 class FunctionEmitter private constructor(private val emitter: Emitter, private val cfBuilder: ClassFileBuilder) {
     lateinit var builder: MethodBuilder private set
@@ -46,7 +47,7 @@ class FunctionEmitter private constructor(private val emitter: Emitter, private 
         throw Exception("$pattern is not accessible")
     }
 
-    fun emit(fn: Expression.Function): List<Attribute> {
+    fun emit(fn: Expression.Function) {
         val fnType = fn.type as Type.FnType
         emit(fn.body)
         if (fn.body.type!! == unit_type()) {
@@ -54,11 +55,9 @@ class FunctionEmitter private constructor(private val emitter: Emitter, private 
         } else {
             bb.return_value(fnType.codom)
         }
-
-        return builder.finish()
     }
 
-    fun finish() = builder.finish()
+    fun finish(dumpDot: Writer?) = builder.finish(dumpDot)
 
     fun emit(expr: Expression) {
         emitter.emit_datatype_classfile_if_needed(expr.type!!)

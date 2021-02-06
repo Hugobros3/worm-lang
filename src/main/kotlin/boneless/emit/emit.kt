@@ -9,6 +9,7 @@ import boneless.type.PrimitiveTypeEnum
 import boneless.type.Type
 import boneless.util.prettyPrint
 import java.io.File
+import java.io.Writer
 
 class Emitter(val modules: List<Module>, val outputDir: File) {
     val mod_classes = mutableMapOf<Module, ClassFile>()
@@ -51,7 +52,10 @@ class Emitter(val modules: List<Module>, val outputDir: File) {
                 val descriptor = getMethodDescriptor(fnt)
                 when (d) {
                     is Expression.Function -> {
-                        val attributes = FunctionEmitter(this, builder, d).emit(d)
+                        var dump: Writer? = null
+                        val fnEmitter = FunctionEmitter(this, builder, d)
+                        fnEmitter.emit(d)
+                        val attributes = fnEmitter.finish(dump)
                         builder.method(f, descriptor, defaulMethodAccessFlags.copy(acc_final = true, acc_static = true), attributes)
                     }
                     is Expression.IdentifierRef -> when(val r = d.id.resolved) {
@@ -60,7 +64,9 @@ class Emitter(val modules: List<Module>, val outputDir: File) {
                         is TermLocation.BuiltinFnRef -> {
                             val wrapper = fn_wrapper(d)
                             println(wrapper.prettyPrint())
-                            val attributes = FunctionEmitter(this, builder, wrapper).emit(wrapper)
+                            val fnEmitter = FunctionEmitter(this, builder, wrapper)
+                            fnEmitter.emit(wrapper)
+                            val attributes = fnEmitter.finish(null)
                             builder.method(f, descriptor, defaulMethodAccessFlags.copy(acc_final = true, acc_static = true), attributes)
                         }
                         is TermLocation.TypeParamRef -> TODO()
@@ -81,9 +87,19 @@ class Emitter(val modules: List<Module>, val outputDir: File) {
                 is Def.DefBody.ExprBody -> TODO()
                 is Def.DefBody.DataCtor -> TODO()
                 is Def.DefBody.FnBody -> {
+                    var dump: Writer? = null
+                    if (def.body.dump_dot) {
+                        val file = File("test_out/debugviz/debug_graph_${def.module_}_${def.identifier}.dot")
+                        file.parentFile.mkdirs()
+                        dump = file.writer()
+                    }
+
                     val descriptor = getMethodDescriptor(def.type as Type.FnType)
-                    val attributes = FunctionEmitter(this, builder, def.body.fn).emit(def.body.fn)
+                    val fnEmitter = FunctionEmitter(this, builder, def.body.fn)
+                    fnEmitter.emit(def.body.fn)
+                    val attributes = fnEmitter.finish(dump)
                     builder.method(def.identifier, descriptor, defaulMethodAccessFlags.copy(acc_final = true, acc_static = true), attributes)
+                    dump?.close()
                 }
                 is Def.DefBody.TypeAlias -> {
                     emit_datatype_classfile_if_needed(def.type!!)

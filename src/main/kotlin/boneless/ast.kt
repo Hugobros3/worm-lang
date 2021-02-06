@@ -17,7 +17,7 @@ data class Def(val identifier: Identifier, val body: DefBody, val typeParamsName
             // Created by type-checker
             lateinit var nominalType: Type.NominalType
         }
-        data class FnBody(val fn: Expression.Function, val annotatedType: TypeExpr?): DefBody()
+        data class FnBody(val fn: Expression.Function, val annotatedType: TypeExpr?): DefBody() { var dump_dot: Boolean = false }
         data class TypeAlias(val aliasedType: TypeExpr): DefBody()
 
         data class Contract(val payload: TypeExpr) : DefBody()

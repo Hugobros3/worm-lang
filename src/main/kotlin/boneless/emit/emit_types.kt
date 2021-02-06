@@ -120,7 +120,7 @@ fun Emitter.emit_datatype_classfile_if_needed(type: Type) {
                 }
                 bb.return_value(type)
 
-                val attributes = functionEmitter.finish()
+                val attributes = functionEmitter.finish(null)
                 builder.method("<init>", initDescriptor, defaulMethodAccessFlags.copy(acc_static = true, acc_public = true), attributes)
                 builder.finish()
             }

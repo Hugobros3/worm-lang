@@ -224,7 +224,7 @@ fun Emitter.emit_builtin_fn_classfile(): ClassFile {
             else -> throw Exception("Missing codegen for intrinsic ${builtin}")
         }
 
-        val attributes = fnEmitter.finish()
+        val attributes = fnEmitter.finish(null)
         val descriptor = getMethodDescriptor(builtin.type)
         cfBuilder.method(builtin.name, descriptor, defaulMethodAccessFlags.copy(acc_final = true, acc_static = true), attributes)
     }

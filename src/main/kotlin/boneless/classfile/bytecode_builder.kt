@@ -1,11 +1,13 @@
 package boneless.classfile
 
+import boneless.classfile.util.MethodBuilderDotPrinter
 import boneless.emit.getFieldDescriptor
 import boneless.emit.getMethodDescriptor
 import boneless.emit.getVerificationType
 import boneless.type.Type
 import java.io.ByteArrayOutputStream
 import java.io.DataOutputStream
+import java.io.Writer
 import java.lang.Integer.max
 
 internal sealed class BasicBlockOutFlow {
@@ -49,7 +51,7 @@ private sealed class Patch {
 class MethodBuilder(private val classFileBuilder: ClassFileBuilder, initialLocals: List<VerificationType>) {
     val initialBasicBlock = BasicBlock(classFileBuilder, initialLocals, emptyList(), "entry_point")
 
-    private val bbBuilders = mutableListOf<BasicBlock>()
+    internal val bbBuilders = mutableListOf<BasicBlock>()
     private var cnt = 0
 
     private val baos___ = ByteArrayOutputStream()
@@ -78,9 +80,17 @@ class MethodBuilder(private val classFileBuilder: ClassFileBuilder, initialLocal
         return basicBlock(predecessor.locals, predecessor.stack + additionalStackInputs, bbName)
     }
 
-    fun finish(): List<Attribute> {
+    fun finish(dumpDot: Writer?): List<Attribute> {
         var max_stack = 0
         var max_locals = 0
+
+        /*for (bb in bbBuilders) {
+            assert(bb.finalized)
+        }*/
+
+        if (dumpDot != null) {
+            MethodBuilderDotPrinter(this, dumpDot).print()
+        }
 
         fun emit_bb(bb: BasicBlock): Int {
             if (bb.emitted_position != null)
@@ -93,7 +103,7 @@ class MethodBuilder(private val classFileBuilder: ClassFileBuilder, initialLocal
                 val p = position()
                 dos.write(bb.code)
                 bb.emitted_position = p
-                when (val succ = bb.succ!!) {
+                when (val succ = bb.outgoingFlow!!) {
                     BasicBlockOutFlow.Undef -> throw Exception("Uninitialized control flow !")
                     BasicBlockOutFlow.FnReturn -> {
                         /** nothing to do, instruction was already in the bb */
@@ -215,10 +225,11 @@ class BasicBlock internal constructor(
 
     private val baos___ = ByteArrayOutputStream()
     private val dos = DataOutputStream(baos___)
-    private var finalized = false
+    internal var finalized = false
+        private set
 
     internal lateinit var code: ByteArray
-    internal var succ: BasicBlockOutFlow? = null
+    internal var outgoingFlow: BasicBlockOutFlow? = null
     internal var emitted_position: Int? = null
 
     internal val isJumpTarget: Boolean get() = predecessors.isNotEmpty()
@@ -540,15 +551,15 @@ class BasicBlock internal constructor(
 
     fun return_void() {
         assertNotFinalized()
-        if (succ != null)
+        if (outgoingFlow != null)
             throw Exception("Can't set successor twice")
         instruction(JVMInstruction.`return`)
-        succ = BasicBlockOutFlow.FnReturn
+        outgoingFlow = BasicBlockOutFlow.FnReturn
     }
 
     fun return_value(type: Type) {
         assertNotFinalized()
-        if (succ != null)
+        if (outgoingFlow != null)
             throw Exception("Can't set successor twice")
         val vt = classFileBuilder.getVerificationType(type) ?: throw Exception("Return can't be zero sized: $type")
         popStack(vt)
@@ -560,21 +571,21 @@ class BasicBlock internal constructor(
             is VerificationType.Object -> instruction(JVMInstruction.areturn)
             else -> throw Exception("Unhandled vt: vt")
         }
-        succ = BasicBlockOutFlow.FnReturn
+        outgoingFlow = BasicBlockOutFlow.FnReturn
     }
 
     fun jump(target: BasicBlock) {
         assertNotFinalized()
-        if (succ != null)
+        if (outgoingFlow != null)
             throw Exception("Can't set successor twice")
-        succ = BasicBlockOutFlow.Jump(target)
+        outgoingFlow = BasicBlockOutFlow.Jump(target)
     }
 
     fun branch(mode: BranchType, ifTrue: BasicBlock, ifFalse: BasicBlock) {
         assertNotFinalized()
-        if (succ != null)
+        if (outgoingFlow != null)
             throw Exception("Can't set successor twice")
-        succ = BasicBlockOutFlow.Branch(mode, ifTrue, ifFalse)
+        outgoingFlow = BasicBlockOutFlow.Branch(mode, ifTrue, ifFalse)
     }
 
     private fun assertNotFinalized() {

@@ -14,6 +14,13 @@ class TestJVMCodegen {
         val parser =
             Parser(str, Tokenizer(str).tokenize())
         val module = parser.parseModule(moduleName)
+        for (def in module.defs) {
+            when(val b = def.body) {
+                is Def.DefBody.FnBody -> {
+                    b.dump_dot = true
+                }
+            }
+        }
         bind(module)
         type(module)
 
