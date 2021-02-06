@@ -68,4 +68,11 @@ instance GrtEq::F32 = ( grteq = jvm_grteq_f32 );
 
 val prelude_cmp_module = createModule("Prelude_Cmp", prelude_cmp).also { bind(it) ; type(it) }
 
-val prelude_modules = listOf(prelude_math_module, prelude_logic_module, prelude_cmp_module)
+val prelude_ref = """
+forall P, T contract Assign = fn [P, T] -> [];
+forall P, T contract Access = fn P -> T;
+""".trimIndent()
+
+val prelude_ref_module = createModule("Prelude_Ref", prelude_ref).also { bind(it) ; type(it) }
+
+val prelude_modules = listOf(prelude_math_module, prelude_logic_module, prelude_cmp_module, prelude_ref_module)

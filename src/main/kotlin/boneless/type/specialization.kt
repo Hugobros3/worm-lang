@@ -15,6 +15,7 @@ fun specializeType(type: Type, substitutions: Map<Type, Type>): Type = when {
     type is Type.NominalType -> type.copy(name = "${type.name}$${substitutions.map { (k, v) -> "${k.prettyPrint()} -> ${v.prettyPrint()}" }}", dataType = specializeType(type.dataType, substitutions))
     type is Type.PrimitiveType ||
     type is Type.TypeParam -> type
+    type is Type.Mut -> type.copy(elementType = specializeType(type.elementType, substitutions))
     else -> throw Exception("Unhandled $type")
 }
 
@@ -27,6 +28,7 @@ fun findTypeParams(type: Type): List<TermLocation.TypeParamRef> = when(type) {
     is Type.NominalType -> findTypeParams(type.dataType)
     is Type.FnType -> findTypeParams(type.dom) + findTypeParams(type.codom)
     is Type.TypeParam -> listOf(type.bound)
+    is Type.Mut -> findTypeParams(type.elementType)
     is Type.Top -> emptyList()
 }
 
@@ -41,24 +43,6 @@ fun needTypeParamInference(expr: Expression): Boolean = when(expr) {
     is Expression.ExprSpecialization -> false
     is Expression.Projection -> needTypeParamInference(expr.expression)
     else -> false
-}
-
-fun idk(expr: Expression, target: Expression): Map<TermLocation.TypeParamRef, Type> = when {
-    expr is Expression.QuoteLiteral -> TODO()
-    expr is Expression.QuoteType -> TODO()
-    expr is Expression.IdentifierRef -> TODO()
-    expr is Expression.ExprSpecialization -> TODO()
-    expr is Expression.ListExpression -> TODO()
-    expr is Expression.RecordExpression -> TODO()
-    expr is Expression.Projection -> TODO()
-    expr is Expression.Invocation -> TODO()
-    expr is Expression.Function -> TODO()
-    expr is Expression.Ascription -> TODO()
-    expr is Expression.Cast -> TODO()
-    expr is Expression.Sequence -> TODO()
-    expr is Expression.Conditional -> TODO()
-    expr is Expression.WhileLoop -> TODO()
-    else -> TODO()
 }
 
 fun unify(type: Type, expected: Type): Map<Type, Type> = when {

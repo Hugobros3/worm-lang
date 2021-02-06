@@ -18,15 +18,16 @@ fun type(module: Module) {
 }
 
 interface Typeable {
-    val type: Type?
+    val type: Type
     fun set_type(type: Type)
+    val is_typed_yet: Boolean
 }
 
 fun typeable() = object : Typeable {
     private var _type: Type? = null
 
-    override val type: Type?
-        get() = _type
+    override val type: Type
+        get() = _type ?: throw Exception("Type isn't set yet")
 
     override fun set_type(type: Type) {
         if (_type != null)
@@ -34,6 +35,8 @@ fun typeable() = object : Typeable {
         _type = type
     }
 
+    override val is_typed_yet: Boolean
+        get() = _type != null
 }
 
 class TypeChecker(val module: Module) {
@@ -70,17 +73,24 @@ class TypeChecker(val module: Module) {
             throw Exception("Expected $expected_type but got $type")
     }
 
-    fun coerce(expr: Expression, type: Type, expected_type: Type) {
+    fun coerce(expr: Expression, type: Type, expected_type: Type): Type {
         if (type == expected_type)
-            return Unit
+            return expected_type
         if (isSubtype(type, expected_type)) {
             expr.deducedImplicitCast = expected_type
+            return type
         } else
             throw Exception("Expected $expected_type but got $type")
     }
 
-    fun infer(node: Typeable): Type {
-        node.type?.let { return (it) }
+    fun infer(node: Typeable) = infer_(node, true)
+    fun infer_def_lazily(node: Def) = infer_(node, false)
+
+    private fun infer_(node: Typeable, throwIfAlreadyTyped: Boolean): Type {
+        if (node.is_typed_yet) {
+            if (throwIfAlreadyTyped) throw Exception("The type already exists!")
+            else return node.type
+        }
         val inferred = when (node) {
             is Def -> inferDef(node)
             is Literal -> inferValue(node)
@@ -93,7 +103,7 @@ class TypeChecker(val module: Module) {
     }
 
     fun check(node: Typeable, expected_type: Type): Type {
-        node.type?.let { throw Exception("The type already exists!") }
+        if (node.is_typed_yet) throw Exception("The type already exists!")
         val checked = when (node) {
             is Def -> throw Exception("You may not check a def - this is local type inference only.")
             is Literal -> checkValue(node, expected_type)
@@ -107,7 +117,7 @@ class TypeChecker(val module: Module) {
 
     fun type() {
         for (def in module.defs) {
-            infer(def)
+            infer_def_lazily(def)
         }
     }
 
@@ -149,7 +159,7 @@ class TypeChecker(val module: Module) {
                 val contract_def = get_def(body.contractId.resolved)
                 contract_def?.body as? Def.DefBody.Contract
                     ?: throw Exception("Instances must reference contract definitions")
-                val contract_type = infer(contract_def)
+                val contract_type = infer_def_lazily(contract_def)
 
                 body.arguments = body.argumentsExpr.map { resolveTypeExpression(it) }
 
@@ -178,8 +188,8 @@ class TypeChecker(val module: Module) {
             is Expression.QuoteType -> TODO()
             is Expression.IdentifierRef -> {
                 when (val r = expr.id.resolved) {
-                    is TermLocation.DefRef -> infer(r.def)
-                    is TermLocation.BinderRef -> infer(r.binder)
+                    is TermLocation.DefRef -> infer_def_lazily(r.def)
+                    is TermLocation.BinderRef -> r.binder.type
                     is TermLocation.BuiltinFnRef -> r.fn.type
                     is TermLocation.TypeParamRef -> Type.TypeParam(r)
                 }
@@ -200,7 +210,7 @@ class TypeChecker(val module: Module) {
                 if (def.body is Def.DefBody.Contract) findInstance(module, def, typeArguments)
                         ?: throw Exception("No instance for contract ${def.identifier} with type arguments ${typeArguments.map { it.prettyPrint() }}")
 
-                val genericType = infer(def)
+                val genericType = infer_def_lazily(def)
                 val substitutions = def.typeParamsNames.mapIndexed { i, _ ->
                     Pair(Type.TypeParam(TermLocation.TypeParamRef(def, i)) as Type, typeArguments[i])
                 }.toMap()
@@ -232,7 +242,7 @@ class TypeChecker(val module: Module) {
                         val body = def?.body
                         val assumedRet = assumptions[def]
                         if (body is Def.DefBody.FnBody && assumedRet != null) {
-                            val completeType = Type.FnType(body.fn.param.type!!, assumedRet)
+                            val completeType = Type.FnType(body.fn.param.type, assumedRet)
                             expr.callee.set_type(completeType)
                             suggestedType = completeType
                         }
@@ -292,7 +302,7 @@ class TypeChecker(val module: Module) {
                 expect(
                     when (val r = expr.id.resolved) {
                         is TermLocation.DefRef -> {
-                            val t = infer(r.def)
+                            val t = infer_def_lazily(r.def)
                             val def = r.def
                             if (def.typeParamsNames.isNotEmpty()) {
                                 val substitutions = unify(t, expected_type)
@@ -301,12 +311,11 @@ class TypeChecker(val module: Module) {
                                 expr.deducedImplicitSpecializationArguments = typeArguments
                                 if (def.body is Def.DefBody.Contract)
                                     findInstance(module, def, typeArguments) ?: throw Exception("No instance for contract ${def.identifier} with type arguments ${typeArguments.map { it.prettyPrint() }}")
-                                coerce(expr, st, expected_type)
-                                return st
+                                return coerce(expr, st, expected_type)
                             }
                             t
                         }
-                        is TermLocation.BinderRef -> infer(r.binder)
+                        is TermLocation.BinderRef -> r.binder.type
                         is TermLocation.BuiltinFnRef -> r.fn.type
                         is TermLocation.TypeParamRef -> Type.TypeParam(r)
                     }, expected_type
@@ -327,8 +336,7 @@ class TypeChecker(val module: Module) {
                         if (def.body is Def.DefBody.Contract)
                             findInstance(module, def, typeArguments) ?: throw Exception("No instance for contract ${def.identifier} with type arguments ${typeArguments.map { it.prettyPrint() }}")
 
-                        coerce(expr.expression, st, expected_type)
-                        return st
+                        return coerce(expr.expression, st, expected_type)
                     }
                 }
 
@@ -466,8 +474,12 @@ class TypeChecker(val module: Module) {
                 Type.RecordType(inferred)
             }
             is Pattern.CtorPattern -> {
-                val nominalTypeCtor = inferTypeOfBinding(pattern.callee.resolved) as? Type.FnType
-                if (nominalTypeCtor == null)
+                val nominalTypeCtor = when (val r = pattern.callee.resolved) {
+                    is TermLocation.DefRef -> if (r.def.is_type) null else infer_def_lazily(r.def)
+                    is TermLocation.TypeParamRef -> { Type.TypeParam(r) ; TODO("resolve") }
+                    else -> throw Exception("Can't possibly be a nominal type ctor")
+                } as? Type.FnType
+                if (nominalTypeCtor == null || nominalTypeCtor.codom !is Type.NominalType)
                     type_error("a constructor pattern has to produce a nominal type")
                 assert(pattern.args.size > 0)
                 val arg_ptrn: Pattern = when {
@@ -475,7 +487,7 @@ class TypeChecker(val module: Module) {
                     else -> Pattern.ListPattern(pattern.args)
                 }
                 check(arg_ptrn, nominalTypeCtor.dom)
-                nominalTypeCtor.codom as Type.NominalType
+                nominalTypeCtor.codom
             }
             is Pattern.TypeAnnotatedPattern -> {
                 check(pattern.pattern, resolveTypeExpression(pattern.annotatedType))
@@ -511,11 +523,15 @@ class TypeChecker(val module: Module) {
                     type_error("records don't match exactly") // TODO: lol subype
             }
             is Pattern.CtorPattern -> {
-                val nominalTypeCtor = inferTypeOfBinding(pattern.callee.resolved) as? Type.FnType
-                if (expected_type !is Type.NominalType || nominalTypeCtor == null)
+                val nominalTypeCtor = when (val r = pattern.callee.resolved) {
+                    is TermLocation.DefRef -> if (r.def.is_type) null else infer_def_lazily(r.def)
+                    is TermLocation.TypeParamRef -> { Type.TypeParam(r) ; TODO("resolve") }
+                    else -> throw Exception("Can't possibly be a nominal type ctor")
+                } as? Type.FnType
+                if (expected_type !is Type.NominalType || nominalTypeCtor == null || nominalTypeCtor.codom !is Type.NominalType)
                     type_error("a constructor pattern has to produce a nominal type")
                 expect(nominalTypeCtor.codom, expected_type)
-                assert(pattern.args.size > 0)
+                assert(pattern.args.isNotEmpty())
                 val arg_ptrn: Pattern = when {
                     pattern.args.size == 1 -> pattern.args[0]
                     else -> Pattern.ListPattern(pattern.args)
@@ -580,16 +596,7 @@ class TypeChecker(val module: Module) {
         }
     }
 
-    fun inferTypeOfBinding(boundIdentifier: TermLocation): Type? {
-        return when (boundIdentifier) {
-            is TermLocation.DefRef -> if (boundIdentifier.def.is_type) null else infer(boundIdentifier.def)
-            is TermLocation.BinderRef -> infer(boundIdentifier.binder)
-            is TermLocation.BuiltinFnRef -> boundIdentifier.fn.type
-            is TermLocation.TypeParamRef -> Type.TypeParam(boundIdentifier)
-        }
-    }
-
-    /** Resolves TypeExprs */
+    /** Resolves TypeExprs. May still contain unspecialized type variables referring to the outer scope! */
     fun resolveTypeExpression(type: TypeExpr): Type = when (type) {
         is TypeExpr.TypeNameRef -> {
             when (val resolved = type.callee.resolved) {
@@ -597,15 +604,15 @@ class TypeChecker(val module: Module) {
                     when (resolved.def.body) {
                         is Def.DefBody.ExprBody -> type_error("${type.callee.identifier} does not name a type")
                         is Def.DefBody.DataCtor -> {
-                            val defType = infer(resolved.def) as Type.FnType
+                            val defType = infer_def_lazily(resolved.def) as Type.FnType
                             defType.codom
                         }
                         is Def.DefBody.TypeAlias -> {
-                            infer(resolved.def)
+                            infer_def_lazily(resolved.def)
                         }
-                        is Def.DefBody.FnBody -> infer(resolved.def) as Type.FnType
+                        is Def.DefBody.FnBody -> type_error("Functions are not types")
                         is Def.DefBody.Contract,
-                        is Def.DefBody.Instance -> throw Exception("Contracts & instances are not types")
+                        is Def.DefBody.Instance -> type_error("Contracts & instances are not types")
                     }
                 }
                 is TermLocation.TypeParamRef -> Type.TypeParam(resolved)
@@ -613,39 +620,29 @@ class TypeChecker(val module: Module) {
             }
         }
         is TypeExpr.TypeSpecialization -> {
-            val def = (type.target.callee.resolved as? TermLocation.DefRef)?.def
-                ?: throw Exception("Can only specialize defs")
+            val def = get_def(type.target.callee.resolved) ?: throw Exception("Can only specialize defs")
             if (def.typeParamsNames.size != type.arguments.size)
                 throw Exception("Given ${type.arguments} arguments but ${def.identifier} only has ${def.typeParamsNames.size} type arguments")
+
+            val genericType = resolveTypeExpression(type.target)
             val typeArguments = type.arguments.map { resolveTypeExpression(it) }
 
             if (def.body is Def.DefBody.Contract)
-                findInstance(module, def, typeArguments)
-                    ?: throw Exception("No instance for contract ${def.identifier} with type arguments ${typeArguments.map { it.prettyPrint() }}")
+                findInstance(module, def, typeArguments) ?: throw Exception("No instance for contract ${def.identifier} with type arguments ${typeArguments.map { it.prettyPrint() }}")
 
-            val genericType = resolveTypeExpression(type.target)
             val substitutions = def.typeParamsNames.mapIndexed { i, _ ->
-                Pair(
-                    Type.TypeParam(TermLocation.TypeParamRef(def, i)) as Type,
-                    typeArguments[i]
-                )
+                Pair(Type.TypeParam(TermLocation.TypeParamRef(def, i)) as Type, typeArguments[i])
             }.toMap()
             specializeType(genericType, substitutions)
         }
         is TypeExpr.PrimitiveType -> Type.PrimitiveType(type.primitiveType)
         is TypeExpr.RecordType -> Type.RecordType(elements = type.elements.map { (i, t) ->
-            Pair(
-                i,
-                resolveTypeExpression(t)
-            )
+            Pair(i, resolveTypeExpression(t))
         })
         is TypeExpr.TupleType -> Type.TupleType(elements = type.elements.map { t -> resolveTypeExpression(t) })
         is TypeExpr.ArrayType -> Type.ArrayType(elementType = resolveTypeExpression(type.elementType), size = type.size)
         is TypeExpr.EnumType -> Type.EnumType(elements = type.elements.map { (i, t) ->
-            Pair(
-                i,
-                resolveTypeExpression(t)
-            )
+            Pair(i, resolveTypeExpression(t))
         })
         is TypeExpr.FnType -> Type.FnType(
             dom = resolveTypeExpression(type.dom),
@@ -656,7 +653,12 @@ class TypeChecker(val module: Module) {
     fun typeInstruction(inst: Instruction) {
         when (inst) {
             is Instruction.Let -> {
-                coInferPtrnExpr(inst.pattern, inst.body)
+                if (inst.mutable) {
+                    //TODO
+                    //coInferPtrnExpr(inst.pattern, inst.body)
+                } else {
+                    coInferPtrnExpr(inst.pattern, inst.body)
+                }
             }
             is Instruction.Evaluate -> infer(inst.expr)
         }

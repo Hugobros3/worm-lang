@@ -31,6 +31,7 @@ fun fn_wrapper(fni: Expression.IdentifierRef): Expression.Function {
         is Type.NominalType -> TODO()
         is Type.FnType -> TODO()
         is Type.TypeParam -> TODO()
+        is Type.Mut -> throw Exception("Cannot appear in function signatures")
         Type.Top -> TODO()
     }
 
@@ -48,6 +49,7 @@ fun fn_wrapper(fni: Expression.IdentifierRef): Expression.Function {
         is Type.NominalType -> TODO()
         is Type.FnType -> TODO()
         is Type.TypeParam -> TODO()
+        is Type.Mut -> throw Exception("Cannot appear in function signatures")
         Type.Top -> TODO()
     }
 

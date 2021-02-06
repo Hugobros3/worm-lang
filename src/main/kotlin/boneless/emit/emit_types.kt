@@ -21,6 +21,7 @@ fun getFieldDescriptor(type: Type): FieldDescriptor? {
         is Type.NominalType -> TODO()
         is Type.FnType -> TODO()
         is Type.Top -> TODO("java/lang/object")
+        is Type.Mut -> throw Exception("Muts don't actually exist and you can't store them")
     }
 }
 
@@ -41,6 +42,7 @@ fun mangled_datatype_name(type: Type): String = when(type) {
     is Type.EnumType -> TODO()
     is Type.NominalType -> "BL_NT_${type.name}"
     is Type.FnType -> throw Exception("Not a data type")
+    is Type.Mut -> throw Exception("Muts don't actually exist and you can't store them")
     is Type.Top -> TODO("java/lang/object")
 }
 
@@ -60,6 +62,7 @@ fun ClassFileBuilder.getVerificationType(type: Type): VerificationType? = when(t
     is Type.NominalType -> TODO()
     is Type.FnType -> TODO()
     is Type.TypeParam -> TODO()
+    is Type.Mut -> throw Exception("Muts don't actually exist and you can't store them")
     Type.Top -> TODO()
 }
 

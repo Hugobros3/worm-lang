@@ -18,6 +18,9 @@ sealed class Type {
     data class NominalType(val name: Identifier, val dataType: Type): Type()
     data class FnType(val dom: Type, val codom: Type, val constructorFor: NominalType? = null, val builtin: BuiltinFn? = null) : Type()
     data class TypeParam(val bound: TermLocation.TypeParamRef) : Type()
+
+    /** Used for mutable local variables */
+    data class Mut(val elementType: Type): Type() { fun check() = assert(elementType !is Mut) }
     object Top : Type()
 }
 
