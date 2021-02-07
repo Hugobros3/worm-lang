@@ -344,14 +344,6 @@ class TestType {
     }
 
     @Test
-    fun testPatternSubtyping() {
-        testType("TestPtrnSubtyping", """
-            fn f2 a: Top => a;
-            fn f3 a -> Top = a;
-        """.trimIndent())
-    }
-
-    @Test
     fun testUndef() {
         testType("TestTypeUndef", """
             fn f() => {
