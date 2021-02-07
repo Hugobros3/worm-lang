@@ -5,14 +5,16 @@ import boneless.core.BuiltinFn
 import boneless.parse.Parser
 import boneless.parse.Tokenizer
 import boneless.type.type
+import boneless.util.AstDotPrinter
 import boneless.util.prettyPrint
 import org.junit.Test
+import java.io.File
 
 class TestType {
-    private fun testType(str: String) {
+    private fun testType(moduleName: String, str: String) {
         val parser =
             Parser(str, Tokenizer(str).tokenize())
-        val module = parser.parseModule()
+        val module = parser.parseModule(moduleName)
         bind(module)
         type(module)
 
@@ -20,22 +22,32 @@ class TestType {
         val module_serialized2 = module.prettyPrint(printInferredTypes = true)
         println(module_serialized)
         println(module_serialized2)
+
+        val dotFile = File("test_out/ast_dot/$moduleName.dot")
+        dotFile.parentFile.mkdirs()
+        val w = dotFile.writer()
+        AstDotPrinter(listOf(module), w).print()
+        w.close()
     }
 
     @Test
     fun testTypeBasic() {
-        testType("""
+        testType("TestTypeBasicPt1", """
             def f1 = 5;
             def f2 = ();
             def f3 = (1, 2, 3);
             def f4 = (x = 1, y = 2);
-            def f5 = fn x: I32 => (x,x);
+        """.trimIndent())
+
+        testType("TestTypeBasicPt2", """
+            def f1 = fn x: I32 => (x, x);
+            def f2 = fn x: I32 => (x, f1(x));
         """.trimIndent())
     }
 
     @Test
     fun testTypeData() {
-        testType("""
+        testType("TestTypeData", """
             data Empty = [];
             fn f1 Empty () => 0;
             fn f2 (Empty ()) => 0;
@@ -49,12 +61,12 @@ class TestType {
 
     @Test
     fun testTypeAnnotation() {
-        testType("""
+        testType("TestTypeAnnotation", """
             def f1 : I32 = 5;
         """.trimIndent())
 
         expectFailure {
-            testType("""
+            testType("TestTypeAnnotationFailure", """
                 def f1 : [] = 5;
             """.trimIndent())
         }
@@ -62,11 +74,7 @@ class TestType {
 
     @Test
     fun testBuiltins() {
-        for (builtin in BuiltinFn.values()) {
-            println(builtin.type)
-        }
-
-        testType("""
+        testType("TestBuiltinsOperations", """
             fn f() => {
                 let x1 = (- 6);
                 let x2 = (3 + 6);
@@ -77,7 +85,7 @@ class TestType {
             };
         """.trimIndent())
 
-        testType("""
+        testType("TestBuiltins2", """
             fn pow2(x: I32) => x * x;
             
             data Pos = [I32, I32];
@@ -88,7 +96,7 @@ class TestType {
 
     @Test
     fun testFloats() {
-        testType("""
+        testType("TestFloats", """
             fn f(f1: F32) => {
                 3.0 * f1
             };
@@ -97,7 +105,7 @@ class TestType {
 
     @Test
     fun testLetInfer() {
-        testType("""
+        testType("TestLetInfer", """
             data Cheese = I32;
             type AlsoCheese = Cheese;
             fn f() => {
@@ -118,7 +126,7 @@ class TestType {
         """.trimIndent())
 
         expectFailure {
-            testType("""
+            testType("TestLetInferFailure", """
                 fn f() => {
                     let r = (a = 1, b = 2);
                     let (a, b) = r;
@@ -129,11 +137,11 @@ class TestType {
 
     @Test
     fun testControlFlow() {
-        testType("""
+        testType("TestControlFlowIf", """
             fn f(a: Bool) => if a then 1 else -1;
         """.trimIndent())
 
-        testType("""
+        testType("TestControlFlowWhile", """
             fn f(a: Bool) -> I32 = {
                 while a do {
                     // a = a + 1;
@@ -145,7 +153,7 @@ class TestType {
 
     @Test
     fun testTypeParams() {
-        testType("""
+        testType("TestTypeParam1", """
             forall T
             fn mk_pair (a: T) => (a, a);
             
@@ -160,7 +168,7 @@ class TestType {
             };
         """.trimIndent())
 
-        testType("""
+        testType("TestTypeParam2", """
             forall T
             data Option = [some = T | none = []];
             
@@ -171,7 +179,7 @@ class TestType {
 
     @Test
     fun testContracts() {
-        testType("""
+        testType("TestContracts1", """
             forall T
             contract Foo = [
                 fooerize = fn T -> I32
@@ -192,7 +200,7 @@ class TestType {
         """.trimIndent())
 
         expectFailure {
-            testType("""
+            testType("TestContractsFail", """
             forall T
             contract Foo = [
                 fooerize = fn T -> I32
@@ -204,7 +212,7 @@ class TestType {
         """.trimIndent())
         }
 
-        testType("""
+        testType("TestContracts2", """
             forall T
             contract Foo = [
                 fooerize = fn T -> I32
@@ -223,7 +231,7 @@ class TestType {
 
     @Test
     fun testProjection() {
-        testType("""
+        testType("TestProjection", """
             forall T1, T2
             data Pair = [first = T1, second = T2];
             
@@ -233,7 +241,7 @@ class TestType {
 
     @Test
     fun testTypeArgsInference() {
-        testType("""
+        testType("TestTypeArgInference1", """
             forall T
             fn mk_pair (a: T) => (a, a);
             
@@ -242,7 +250,7 @@ class TestType {
             };
         """.trimIndent())
 
-        testType("""
+        testType("TestTypeArgInference2", """
             forall T
             contract Foo = [
                 fooerize = fn T -> I32
@@ -261,7 +269,7 @@ class TestType {
 
     @Test
     fun testTypeArgsInferenceReverse() {
-        testType("""
+        testType("TestTypeArgsInferenceReverse", """
             forall T
             contract random = fn [] -> T;
             
@@ -275,7 +283,7 @@ class TestType {
 
     @Test
     fun testVector() {
-        testType("""
+        testType("TestVector", """
             forall T
             data Vec3 = [x = F32, y = F32, z = F32];
             
@@ -286,7 +294,7 @@ class TestType {
 
     @Test
     fun testRectangle() {
-        testType("""
+        testType("TestTypeRectangle", """
             data Point = [I32, I32];
             data Rectangle = [min = Point, max = Point];
 
@@ -301,7 +309,7 @@ class TestType {
 
     @Test
     fun testSubtypingBasic() {
-        testType("""
+        testType("TestSubtypingBasic", """
             fn f() => {
                 let x: [a = I32] = (a = 36, b = 37);
                 let y: [a = I32 | b = F32] = (a = 36);
@@ -315,7 +323,7 @@ class TestType {
 
     @Test
     fun testSubtypingFunctions() {
-        testType("""
+        testType("TestSubtypingFn", """
             fn f(
                 a: fn [a = I32, b = I32] -> []
             ) => {
@@ -325,7 +333,7 @@ class TestType {
         """.trimIndent())
 
         expectFailure {
-            testType("""
+            testType("TestSubtypingFnFail", """
                 fn f(
                     a: fn [a = I32, b = I32] -> []
                 ) => {
@@ -337,7 +345,7 @@ class TestType {
 
     @Test
     fun testPatternSubtyping() {
-        testType("""
+        testType("TestPtrnSubtyping", """
             fn f1 a => a;
             fn f2 a: Top => a;
             fn f3 a -> Top = a;
@@ -346,7 +354,7 @@ class TestType {
 
     @Test
     fun testUndef() {
-        testType("""
+        testType("TestTypeUndef", """
             fn f() => {
                 let x: I32 = undef();
             };
@@ -355,7 +363,7 @@ class TestType {
 
      @Test
      fun testCast() {
-         testType("""
+         testType("TestTypeCast", """
              fn f(
                 a: [a = I32, b = I32]
             ) => {
@@ -364,7 +372,7 @@ class TestType {
          """.trimIndent())
 
          expectFailure {
-             testType("""
+             testType("TestTypeCastFail", """
                  fn f a => (a, a as I32);
              """.trimIndent())
          }
@@ -372,13 +380,13 @@ class TestType {
 
     @Test
     fun testMut() {
-        testType("""
+        testType("TestMut", """
             fn f() => {
                 let mut x: I32 = 0;
             };
         """.trimIndent())
 
-        testType("""
+        testType("TestMut2", """
             fn f() => {
                 let mut x: I32 = 0;
                 let y = x;

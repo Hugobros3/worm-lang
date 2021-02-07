@@ -34,8 +34,10 @@ sealed class Instruction {
     data class Evaluate(val expr: Expression) : Instruction()
 }
 
+private var uuid = 0
+
 sealed class Pattern : Typeable by typeable() {
-    data class BinderPattern(val id: Identifier, val mutable: Boolean): Pattern()
+    data class BinderPattern(val id: Identifier, val mutable: Boolean, val uniqueId: Int = uuid++): Pattern()
     data class LiteralPattern(val literal: Literal): Pattern()
     data class ListPattern(val elements: List<Pattern>): Pattern()
     data class RecordPattern(val fields: List<Pair<Identifier, Pattern>>): Pattern()
