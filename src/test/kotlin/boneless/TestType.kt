@@ -23,11 +23,11 @@ class TestType {
         println(module_serialized)
         println(module_serialized2)
 
-        val dotFile = File("test_out/ast_dot/$moduleName.dot")
+        /*val dotFile = File("test_out/ast_dot/$moduleName.dot")
         dotFile.parentFile.mkdirs()
         val w = dotFile.writer()
         AstDotPrinter(listOf(module), w).print()
-        w.close()
+        w.close()*/
     }
 
     @Test
@@ -346,7 +346,6 @@ class TestType {
     @Test
     fun testPatternSubtyping() {
         testType("TestPtrnSubtyping", """
-            fn f1 a => a;
             fn f2 a: Top => a;
             fn f3 a -> Top = a;
         """.trimIndent())
