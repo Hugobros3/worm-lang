@@ -10,20 +10,11 @@ fun Module.prettyPrint(resugarizePrefixAndInfixSymbols: Boolean = true, printInf
     return PrettyPrinter(resugarizePrefixAndInfixSymbols, printInferredTypes).run { t.print() }
 }
 
-fun Expression.prettyPrint(): String {
-    val t = this
-    return PrettyPrinter().run { t.print() }
-}
-
-fun Type.prettyPrint(): String {
-    val t = this
-    return PrettyPrinter().run { t.print() }
-}
-
-fun TypeExpr.prettyPrint(): String {
-    val t = this
-    return PrettyPrinter().run { t.print() }
-}
+fun Expression.prettyPrint(): String = PrettyPrinter().run { this@prettyPrint.print() }
+fun Type.prettyPrint(): String = PrettyPrinter().run { this@prettyPrint.print() }
+fun TypeExpr.prettyPrint(): String = PrettyPrinter().run { this@prettyPrint.print() }
+fun Pattern.prettyPrint(): String = PrettyPrinter().run { this@prettyPrint.print() }
+fun Literal.prettyPrint(): String = PrettyPrinter().run { this@prettyPrint.print() }
 
 private class PrettyPrinter(val resugarizePrefixAndInfixSymbols: Boolean = true, val printInferredTypes: Boolean = false) {
     fun Module.print() = defs.joinToString("\n") { it.print() }

@@ -79,7 +79,9 @@ sealed class Expression : Typeable by typeable() {
     data class Ascription(val expr: Expression, val ascribedType: TypeExpr) : Expression()
     data class Cast(val expr: Expression, val destinationType: TypeExpr) : Expression()
 
+    /** You can only assign mutable binders by *directly* referencing them (using an IdentifierRef) - or you have to be calling Assign::assign on an appropriate value */
     data class Assignment(val target: Expression, val value: Expression) : Expression() {
+        /** Set by type checking */
         var mut_binder: Pattern.BinderPattern? = null
     }
 

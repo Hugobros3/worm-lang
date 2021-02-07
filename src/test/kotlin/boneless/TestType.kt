@@ -377,5 +377,12 @@ class TestType {
                 let mut x: I32 = 0;
             };
         """.trimIndent())
+
+        testType("""
+            fn f() => {
+                let mut x: I32 = 0;
+                let y = x;
+            };
+        """.trimIndent())
     }
 }

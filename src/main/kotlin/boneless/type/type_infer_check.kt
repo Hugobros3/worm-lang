@@ -183,7 +183,7 @@ class TypeChecker(val module: Module) {
                         else
                             infer_def_lazily(r.def)
                     }
-                    is TermLocation.BinderRef -> r.binder.type
+                    is TermLocation.BinderRef -> remove_mut(r.binder.type)
                     is TermLocation.BuiltinFnRef -> r.fn.type
                     is TermLocation.TypeParamRef -> Type.TypeParam(r)
                 }
@@ -296,16 +296,18 @@ class TypeChecker(val module: Module) {
             }
             is Expression.Assignment -> {
                 val target_type = infer(expr.target)
-                if (target_type is Type.Mut) {
-                    if (expr.target !is Expression.IdentifierRef || get_binder(expr.target) == null)
-                        throw Exception("Muts should not be stored, something is wrong")
-                    expr.mut_binder = get_binder(expr.target)
-                    val no_mut = remove_mut(target_type)
-                    check(expr.value, no_mut)
-                    unit_type()
-                } else {
-                    TODO("Use traits for custom assignment logic")
-                }
+
+                // TODO("Use traits for custom assignment logic")
+
+                if (expr.target !is Expression.IdentifierRef || get_binder(expr.target) == null)
+                    type_error("Cannot assign ${expr.target.prettyPrint()}")
+                val binder = get_binder(expr.target)!!
+                if (!binder.mutable)
+                    type_error("variable ${binder.prettyPrint()} is not mutable")
+                expr.mut_binder = binder
+                val no_mut = remove_mut(target_type)
+                check(expr.value, no_mut)
+                unit_type()
             }
         }
     }
