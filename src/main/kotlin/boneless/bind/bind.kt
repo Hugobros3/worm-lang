@@ -17,7 +17,7 @@ data class BindPoint private constructor(val identifier: Identifier) {
 /** Contains information to locate the AST node referenced by an identifier */
 sealed class TermLocation {
     data class DefRef(val def: Def) : TermLocation()
-    data class BinderRef(val binder: Pattern.BinderPattern, val is_mutable: Boolean = false) : TermLocation()
+    data class BinderRef(val binder: Pattern.BinderPattern) : TermLocation()
     data class BuiltinFnRef(val fn: BuiltinFn) : TermLocation()
     data class TypeParamRef(val def: Def, val index: Int) : TermLocation() {
         override fun toString(): String {
@@ -31,6 +31,13 @@ fun get_def(loc: TermLocation): Def? = when (loc) {
     else -> null
 }
 fun get_def(e: Expression) = (e as? Expression.IdentifierRef)?.id?.resolved?.let { get_def(it) }
+
+fun get_binder(loc: TermLocation): Pattern.BinderPattern? = when(loc) {
+    is TermLocation.BinderRef -> loc.binder
+    else -> null
+}
+
+fun get_binder(e: Expression) = (e as? Expression.IdentifierRef)?.id?.resolved?.let { get_binder(it) }
 
 fun bind(module: Module) {
     for (def in module.defs) {
@@ -172,6 +179,10 @@ class BindHelper(private val module: Module) {
             }
             is Expression.Projection -> {
                 bind(expr.expression)
+            }
+            is Expression.Assignment -> {
+                bind(expr.target)
+                bind(expr.value)
             }
             else -> throw Exception("Unhandled ast node $expr")
         }

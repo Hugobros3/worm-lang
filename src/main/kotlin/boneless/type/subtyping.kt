@@ -5,6 +5,8 @@ fun isSubtype(T: Type, S: Type): Boolean {
         S == Type.Top -> true
         T == S -> true
 
+        // T is Type.Mut && isSubtype(T.elementType, S) -> true
+
         // A definite array is a subtype of a tuple type iff that tuple type is not unit, and it has the same data layout as the definite array
         T is Type.ArrayType && S is Type.TupleType && T.isDefinite && T.size == S.elements.size && S.elements.all { it == T.elementType } -> true
         // And vice versa

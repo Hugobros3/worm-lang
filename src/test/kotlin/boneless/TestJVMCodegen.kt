@@ -167,4 +167,22 @@ class TestJVMCodegen {
         val outputDir = File("test_out/")
         emit(mod, outputDir)
     }
+
+    @Test
+    fun testFactorialIterative() {
+        val mod = module("TestFactorialIterative","""
+            fn fac(n: I32) -> I32 = {
+                let mut acc = 1;
+                let mut i = 1;
+                while i <= n do {
+                    acc := acc * i;
+                    i := i + 1;
+                };
+                acc
+            };
+        """.trimIndent())
+
+        val outputDir = File("test_out/")
+        emit(mod, outputDir)
+    }
 }

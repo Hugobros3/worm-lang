@@ -2,6 +2,7 @@ package boneless.type
 
 import boneless.*
 import boneless.bind.TermLocation
+import boneless.bind.get_binder
 import boneless.bind.get_def
 import boneless.util.Visitors
 import boneless.util.prettyPrint
@@ -69,11 +70,15 @@ class TypeChecker(val module: Module) {
     fun coerce(expr: Expression, type: Type, expected_type: Type): Type {
         if (type == expected_type)
             return expected_type
-        if (isSubtype(type, expected_type)) {
+        else if (isSubtype(type, expected_type)) {
             expr.implicitUpcast = expected_type
             return type
-        } else
+        } else if (type is Type.Mut) {
+            expr.implicitDeref++
+            return coerce(expr, type.elementType, expected_type)
+        } else {
             type_error("Expected ${expected_type.prettyPrint()} (or a subtype) but got ${type.prettyPrint()}")
+        }
     }
 
     fun infer(node: Typeable) = infer_(node, true)
@@ -289,6 +294,19 @@ class TypeChecker(val module: Module) {
                 infer(expr.body)
                 unit_type()
             }
+            is Expression.Assignment -> {
+                val target_type = infer(expr.target)
+                if (target_type is Type.Mut) {
+                    if (expr.target !is Expression.IdentifierRef || get_binder(expr.target) == null)
+                        throw Exception("Muts should not be stored, something is wrong")
+                    expr.mut_binder = get_binder(expr.target)
+                    val no_mut = remove_mut(target_type)
+                    check(expr.value, no_mut)
+                    unit_type()
+                } else {
+                    TODO("Use traits for custom assignment logic")
+                }
+            }
         }
     }
 
@@ -328,10 +346,15 @@ class TypeChecker(val module: Module) {
                 else fallback()
             }
             is Expression.Invocation -> {
-                val argType = infer(expr.arg)
+                var argType = infer(expr.arg)
                 var targetType = infer(expr.callee)
                 if (targetType !is Type.FnType)
                     type_error("invocation callee is not a function $targetType")
+
+                // Force dereferencing any local mutables in argType:
+                reset_types(expr.arg)
+                argType = check(expr.arg, remove_mut(argType))
+                // assert_no_mut(argType)
 
                 val unbound = targetType.getUnboundTypeParams()
                 if (unbound.isNotEmpty()) {
@@ -375,6 +398,7 @@ class TypeChecker(val module: Module) {
                 expect(left, expected_type)
                 expected_type
             }
+            is Expression.Assignment,
             is Expression.Ascription,
             is Expression.Cast,
             is Expression.WhileLoop -> fallback()
@@ -427,7 +451,7 @@ class TypeChecker(val module: Module) {
 
     fun inferPattern(pattern: Pattern): Type {
         return when (pattern) {
-            is Pattern.BinderPattern -> Type.Top
+            is Pattern.BinderPattern -> type_error("No way to infer the type of $pattern")
             is Pattern.LiteralPattern -> infer(pattern.literal)
             is Pattern.ListPattern -> {
                 val inferred = pattern.elements.map { infer(it) }
@@ -455,6 +479,9 @@ class TypeChecker(val module: Module) {
                 nominalTypeCtor.codom
             }
             is Pattern.TypeAnnotatedPattern -> {
+                //if (pattern.pattern is Pattern.BinderPattern && pattern.pattern.mutable)
+                //    TODO()
+
                 check(pattern.pattern, resolveTypeExpression(pattern.annotatedType))
             }
         }
@@ -462,7 +489,12 @@ class TypeChecker(val module: Module) {
 
     fun checkPattern(pattern: Pattern, expected_type: Type): Type {
         return when (pattern) {
-            is Pattern.BinderPattern -> expected_type
+            is Pattern.BinderPattern -> {
+                if (pattern.mutable)
+                    Type.Mut(expected_type)
+                else
+                    expected_type
+            }
             is Pattern.LiteralPattern -> {
                 expect(inferPattern(pattern), expected_type)
                 expected_type
@@ -505,6 +537,9 @@ class TypeChecker(val module: Module) {
                 expected_type
             }
             is Pattern.TypeAnnotatedPattern -> {
+                if (pattern.pattern is Pattern.BinderPattern && pattern.pattern.mutable)
+                    TODO()
+
                 // this should use the inverse typing relation
                 val annotatedType = resolveTypeExpression(pattern.annotatedType)
                 expect_subtype(expected_type, annotatedType)
@@ -556,7 +591,8 @@ class TypeChecker(val module: Module) {
                 check(expr, ptrnType)
             }
             is Pattern.TypeAnnotatedPattern -> {
-                check(expr, infer(pattern))
+                val inferred = infer(pattern)
+                check(expr, remove_mut(inferred))
             }
         }
     }
@@ -619,12 +655,7 @@ class TypeChecker(val module: Module) {
     fun typeInstruction(inst: Instruction) {
         when (inst) {
             is Instruction.Let -> {
-                if (inst.mutable) {
-                    //TODO
-                    //coInferPtrnExpr(inst.pattern, inst.body)
-                } else {
-                    coInferPtrnExpr(inst.pattern, inst.body)
-                }
+                coInferPtrnExpr(inst.pattern, inst.body)
             }
             is Instruction.Evaluate -> infer(inst.expr)
         }

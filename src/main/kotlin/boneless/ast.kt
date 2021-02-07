@@ -30,12 +30,12 @@ data class Def(val identifier: Identifier, val body: DefBody, val typeParamsName
 }
 
 sealed class Instruction {
-    data class Let(val pattern: Pattern, val body: Expression, val mutable: Boolean) : Instruction()
+    data class Let(val pattern: Pattern, val body: Expression) : Instruction()
     data class Evaluate(val expr: Expression) : Instruction()
 }
 
 sealed class Pattern : Typeable by typeable() {
-    data class BinderPattern(val id: Identifier): Pattern()
+    data class BinderPattern(val id: Identifier, val mutable: Boolean): Pattern()
     data class LiteralPattern(val literal: Literal): Pattern()
     data class ListPattern(val elements: List<Pattern>): Pattern()
     data class RecordPattern(val fields: List<Pair<Identifier, Pattern>>): Pattern()
@@ -79,11 +79,16 @@ sealed class Expression : Typeable by typeable() {
     data class Ascription(val expr: Expression, val ascribedType: TypeExpr) : Expression()
     data class Cast(val expr: Expression, val destinationType: TypeExpr) : Expression()
 
+    data class Assignment(val target: Expression, val value: Expression) : Expression() {
+        var mut_binder: Pattern.BinderPattern? = null
+    }
+
     data class Sequence(val instructions: List<Instruction>, val yieldExpression: Expression?) : Expression()
     data class Conditional(val condition: Expression, val ifTrue: Expression, val ifFalse: Expression) : Expression()
     data class WhileLoop(val loopCondition: Expression, val body: Expression) : Expression()
 
     var implicitUpcast: Type? = null
+    var implicitDeref: Int = 0
 }
 
 sealed class TypeExpr {

@@ -369,4 +369,13 @@ class TestType {
              """.trimIndent())
          }
      }
+
+    @Test
+    fun testMut() {
+        testType("""
+            fn f() => {
+                let mut x: I32 = 0;
+            };
+        """.trimIndent())
+    }
 }

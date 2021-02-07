@@ -101,12 +101,11 @@ class Parser(private val inputAsText: String, private val tokens: List<Tokenizer
         while (true) {
             when {
                 accept("let") -> {
-                    val mutable = accept("mut")
                     val ptrn = eatPattern()
                     expect("=")
                     val rhs = acceptExpression(0) ?: unexpectedToken("expression")
                     expect(";")
-                    instructions += Instruction.Let(ptrn, rhs, mutable)
+                    instructions += Instruction.Let(ptrn, rhs)
                 }
                 else -> {
                     yieldValue = acceptExpression(0) ?: break
@@ -470,6 +469,10 @@ class Parser(private val inputAsText: String, private val tokens: List<Tokenizer
                                 val type = expectType()
                                 accumulator = Expression.Cast(accumulator, type)
                             }
+                            InfixOperator.Assignment -> {
+                                val value = expectExpression(infix.priority)
+                                accumulator = Expression.Assignment(accumulator, value)
+                            }
                             else -> {
                                 val rhs = expectExpression(infix.priority)
                                 accumulator = Expression.Invocation(
@@ -534,6 +537,10 @@ class Parser(private val inputAsText: String, private val tokens: List<Tokenizer
     }
 
     private fun acceptPatternBasic(): Pattern? = when {
+        accept("mut") -> {
+            val id = expectIdentifier()
+            Pattern.BinderPattern(id, true)
+        }
         front.tokenName == "StringLit" -> {
             val nom = eat(); Pattern.LiteralPattern(
                 Literal.StrLiteral(
@@ -548,7 +555,7 @@ class Parser(private val inputAsText: String, private val tokens: List<Tokenizer
             ); }
         front.tokenName == "Identifier" -> {
             val id = eatIdentifier()
-            Pattern.BinderPattern(id)
+            Pattern.BinderPattern(id, false)
         }
         accept("(") -> {
             eatPatternParenthesisInsides(")")
@@ -559,7 +566,7 @@ class Parser(private val inputAsText: String, private val tokens: List<Tokenizer
 
     private fun eatPattern(): Pattern {
         val pattern = acceptPatternBasic() ?: expected("literal or list or dictionary or ctor pattern")
-        if (pattern is Pattern.BinderPattern) {
+        if (pattern is Pattern.BinderPattern && !pattern.mutable) {
             val args = mutableListOf<Pattern>()
             while (true) {
                 val arg = acceptPatternBasic() ?: break

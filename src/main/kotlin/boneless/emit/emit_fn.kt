@@ -7,12 +7,14 @@ import boneless.Pattern
 import boneless.bind.TermLocation
 import boneless.classfile.*
 import boneless.type.Type
+import boneless.type.remove_mut
 import boneless.type.unit_type
 import java.io.Writer
 
 class FunctionEmitter private constructor(private val emitter: Emitter, private val cfBuilder: ClassFileBuilder) {
     lateinit var builder: MethodBuilder private set
-    val patternsAccess = mutableListOf<Map<Pattern, PutOnStack>>()
+    val variablesReadRoutines = mutableMapOf<Pattern, ReadVariableRoutine>()
+    val variablesWriteRoutines = mutableMapOf<Pattern, WriteVariableRoutine>()
 
     lateinit var bb: BasicBlock
 
@@ -22,12 +24,10 @@ class FunctionEmitter private constructor(private val emitter: Emitter, private 
         if (fnType.dom != unit_type()) {
             initialLocals = listOf(cfBuilder.getVerificationType(fnType.dom)!!)
 
-            val procedure: PutOnStack = { bbb ->
+            val procedure: ReadVariableRoutine = { bbb ->
                 bbb.loadVariable(0)
             }
-            val m = mutableMapOf<Pattern, PutOnStack>()
-            emitter.registerPattern(m, fn.param, procedure)
-            patternsAccess += m
+            registerPatternReadRoutine(variablesReadRoutines, fn.param, procedure)
         }
 
         builder = MethodBuilder(cfBuilder, initialLocals)
@@ -40,17 +40,17 @@ class FunctionEmitter private constructor(private val emitter: Emitter, private 
     }
 
     fun accessPtrn(pattern: Pattern) {
-        for (frame in patternsAccess) {
-            (frame[pattern] ?: continue).invoke(bb)
-            return
-        }
-        throw Exception("$pattern is not accessible")
+        variablesReadRoutines[pattern]?.invoke(bb) ?: throw Exception("$pattern is not accessible")
     }
 
-    fun emit(fn: Expression.Function) {
+    fun writePtrn(pattern: Pattern) {
+        variablesWriteRoutines[pattern]?.invoke(bb) ?: throw Exception("$pattern is not accessible")
+    }
+
+    fun emit_function(fn: Expression.Function) {
         val fnType = fn.type as Type.FnType
-        emit(fn.body)
-        if (fn.body.type!! == unit_type()) {
+        emit_expression(fn.body)
+        if (fn.body.type == unit_type()) {
             bb.return_void()
         } else {
             bb.return_value(cfBuilder.getVerificationType(fnType.codom) ?: throw Exception("Return can't be zero sized: ${fnType.codom}"))
@@ -59,8 +59,8 @@ class FunctionEmitter private constructor(private val emitter: Emitter, private 
 
     fun finish(dumpDot: Writer?) = builder.finish(dumpDot)
 
-    fun emit(expr: Expression) {
-        emitter.emit_datatype_classfile_if_needed(expr.type!!)
+    fun emit_expression(expr: Expression) {
+        emitter.emit_datatype_classfile_if_needed(expr.type)
         when (expr) {
             is Expression.QuoteLiteral -> emitter.emit_literal(bb, expr.literal)
             is Expression.QuoteType -> TODO()
@@ -70,7 +70,7 @@ class FunctionEmitter private constructor(private val emitter: Emitter, private 
                 is TermLocation.BuiltinFnRef -> throw Exception("Not allowed / (should not be) possible")
             }
             is Expression.ListExpression -> {
-                when (val type = expr.type!!) {
+                when (val type = expr.type) {
                     is Type.TupleType -> {
                         if (type == unit_type())
                             return
@@ -78,8 +78,8 @@ class FunctionEmitter private constructor(private val emitter: Emitter, private 
                         // outside of its declaring class. Instead, we are required to call the constructor for it, which is mildly ugly but hopefully
                         // the JVM's good reputation for being really good at optimizing away fn calls will save our bacon :)
                         for (element in expr.elements)
-                            emit(element)
-                        bb.callStaticInternal(mangled_datatype_name(expr.type!!), "<init>", getTupleInitializationMethodDescriptor(type), cfBuilder.getVerificationType(type))
+                            emit_expression(element)
+                        bb.callStaticInternal(mangled_datatype_name(expr.type), "<init>", getTupleInitializationMethodDescriptor(type), cfBuilder.getVerificationType(type))
                     }
                     else -> throw Exception("cannot emit a list expression as a ${expr.type}")
                 }
@@ -92,7 +92,7 @@ class FunctionEmitter private constructor(private val emitter: Emitter, private 
                             if (r.def.body is Def.DefBody.FnBody) {
                                 // TODO specialization garbage
                                 assert(r.def.typeParams.isEmpty())
-                                emit(expr.arg)
+                                emit_expression(expr.arg)
                                 val methodDescriptor = getMethodDescriptor((expr.callee.type as Type.FnType))
                                 val expectedReturn = cfBuilder.getVerificationType((expr.callee.type as Type.FnType).codom)
                                 bb.callStaticInternal(r.def.module_, r.def.identifier, methodDescriptor, expectedReturn)
@@ -101,9 +101,9 @@ class FunctionEmitter private constructor(private val emitter: Emitter, private 
                         }
                         is TermLocation.BinderRef -> TODO()
                         is TermLocation.BuiltinFnRef -> {
-                            emit(expr.arg)
-                            val methodDescriptor = getMethodDescriptor((r.fn.type as Type.FnType))
-                            val expectedReturn = cfBuilder.getVerificationType((r.fn.type as Type.FnType).codom)
+                            emit_expression(expr.arg)
+                            val methodDescriptor = getMethodDescriptor(r.fn.type)
+                            val expectedReturn = cfBuilder.getVerificationType(r.fn.type.codom)
                             bb.callStaticInternal("BuiltinFns", r.fn.name, methodDescriptor, expectedReturn)
                             return
                         }
@@ -113,7 +113,7 @@ class FunctionEmitter private constructor(private val emitter: Emitter, private 
                         is TermLocation.DefRef -> {
                             val def = r.def
                             if (def.body is Def.DefBody.Contract) {
-                                emit(expr.arg)
+                                emit_expression(expr.arg)
                                 val methodDescriptor = getMethodDescriptor((expr.callee.type as Type.FnType))
                                 val expectedReturn = cfBuilder.getVerificationType((expr.callee.type as Type.FnType).codom)
                                 bb.callStaticInternal(mangled_contract_instance_name(def.identifier, expr.callee.expression.deducedImplicitSpecializationArguments2!!), expr.callee.id, methodDescriptor, expectedReturn)
@@ -135,9 +135,9 @@ class FunctionEmitter private constructor(private val emitter: Emitter, private 
                 prev.jump(inside_seq)
                 bb = inside_seq
                 for (instruction in expr.instructions)
-                    emit(instruction)
+                    emit_instruction(instruction)
                 if (expr.yieldExpression != null)
-                    emit(expr.yieldExpression)
+                    emit_expression(expr.yieldExpression)
                 bb.jump(after_seq)
                 bb = after_seq
             }
@@ -147,66 +147,81 @@ class FunctionEmitter private constructor(private val emitter: Emitter, private 
                 val ifTrueBB = builder.basicBlock(bb, bbName = "ifTrue")
                 val ifFalseBB = builder.basicBlock(bb, bbName = "ifFalse")
                 val joinBB = builder.basicBlock(bb, additionalStackInputs = additionalStack, bbName = "join")
-                emit(expr.condition)
+                emit_expression(expr.condition)
                 bb.branch(BranchType.IF_NEQ, ifTrueBB, ifFalseBB)
 
                 bb = ifTrueBB
-                emit(expr.ifTrue)
+                emit_expression(expr.ifTrue)
                 ifTrueBB.jump(joinBB)
 
                 bb = ifFalseBB
-                emit(expr.ifFalse)
+                emit_expression(expr.ifFalse)
                 ifFalseBB.jump(joinBB)
                 bb = joinBB
             }
             is Expression.WhileLoop -> {
                 val loopBody = builder.basicBlock(bb, bbName = "loop_body")
                 val loopJoin = builder.basicBlock(bb, bbName = "loop_join")
-                emit(expr.loopCondition)
+                emit_expression(expr.loopCondition)
                 bb.branch(BranchType.IF_NEQ, loopBody, loopJoin)
                 bb = loopBody
 
-                emit(expr.body)
+                emit_expression(expr.body)
                 val vt = cfBuilder.getVerificationType(expr.body.type!!)
                 if (vt != null) {
                     bb.drop_value(vt)
                 }
 
-                emit(expr.loopCondition)
+                emit_expression(expr.loopCondition)
                 bb.branch(BranchType.IF_NEQ, loopBody, loopJoin)
                 bb = loopJoin
             }
             is Expression.ExprSpecialization -> TODO()
             is Expression.Projection -> TODO()
+            is Expression.Assignment -> {
+                if (expr.mut_binder != null) {
+                    emit_expression(expr.value)
+                    writePtrn(expr.mut_binder!!)
+                } else {
+                    TODO()
+                }
+            }
             else -> throw Exception("Unhandled expression ast node: $expr")
         }
     }
 
-    fun emit(instruction: Instruction) {
+    fun emit_instruction(instruction: Instruction) {
         when(instruction) {
             is Instruction.Let -> {
-                val vt = cfBuilder.getVerificationType(instruction.pattern.type!!)
-                val procedure: PutOnStack = if (vt != null) {
-                    val localVar = bb.reserveVariable(vt)
-                    emit(instruction.body)
+                val vt = cfBuilder.getVerificationType(remove_mut(instruction.pattern.type))
+                var localVar = -1
+                val procedure: ReadVariableRoutine = if (vt != null) {
+                    localVar = bb.reserveVariable(vt)
+                    emit_expression(instruction.body)
                     bb.setVariable(localVar)
                     ({
                         it.loadVariable(localVar)
                     })
                 } else {
-                    emit(instruction.body)
+                    emit_expression(instruction.body)
                     ({
                         // fuckall, it is void !
                     })
                 }
 
-                val m = mutableMapOf<Pattern, PutOnStack>()
-                emitter.registerPattern(m, instruction.pattern, procedure)
-                patternsAccess += m
+                registerPatternReadRoutine(variablesReadRoutines, instruction.pattern, procedure)
+                if (instruction.pattern.type is Type.Mut) {
+                    val writeRoutine: WriteVariableRoutine = { bb ->
+                        // This causes writing empty types to be a no-op
+                        if (localVar != -1)
+                            bb.setVariable(localVar)
+                    }
+                    registerPatternWriteRoutine(variablesWriteRoutines, instruction.pattern, writeRoutine)
+                }
             }
             is Instruction.Evaluate -> {
-                emit(instruction.expr)
-                val vt = cfBuilder.getVerificationType(instruction.expr.type!!)
+                emit_expression(instruction.expr)
+                val vt = cfBuilder.getVerificationType(instruction.expr.type)
                 if (vt != null) {
                     bb.drop_value(vt)
                 }

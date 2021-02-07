@@ -63,7 +63,7 @@ fun mergeConstraints(a: Map<Type.TypeParam, Type>, b: Map<Type.TypeParam, Type>)
     for (constraint in a.toList() + b.toList()) {
         val (from, to) = constraint
         if (merged[from] != null && merged[from] != to)
-            throw Exception("Can't unify")
+            throw Exception("Can't unify " + merged[from] + " and " + to)
         merged[from] = to
     }
     return merged

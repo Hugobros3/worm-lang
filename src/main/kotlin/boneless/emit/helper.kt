@@ -14,14 +14,14 @@ fun fn_wrapper(fni: Expression.IdentifierRef): Expression.Function {
     val garbage = mutableMapOf<Int, Pattern.BinderPattern>()
     fun patternFromType(type: Type): Pattern = when(type) {
         is Type.PrimitiveType -> {
-            val g = Pattern.BinderPattern("_internal_garbage_${i}")
+            val g = Pattern.BinderPattern("_internal_garbage_${i}", false)
             g.set_type(type)
             garbage[i++] = g
             g
         }
         is Type.RecordType -> TODO()
         is Type.TupleType -> Pattern.ListPattern(type.elements.map {
-            val g = Pattern.BinderPattern("_internal_garbage_${i}")
+            val g = Pattern.BinderPattern("_internal_garbage_${i}", false)
             g.set_type(it)
             garbage[i++] = g
             g

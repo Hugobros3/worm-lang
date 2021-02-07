@@ -48,7 +48,7 @@ private class PrettyPrinter(val resugarizePrefixAndInfixSymbols: Boolean = true,
     }
 
     private fun Instruction.print() = when (this) {
-        is Instruction.Let -> "let " + (if (mutable) "mut " else "") + " ${pattern.print()}" + " = " + body.print() + ";"
+        is Instruction.Let -> "let " + pattern.print() + " = " + body.print() + ";"
         is Instruction.Evaluate -> expr.prettyPrint() + ";"
     }
 
@@ -74,7 +74,6 @@ private class PrettyPrinter(val resugarizePrefixAndInfixSymbols: Boolean = true,
         fun open() = if (p <= infixOpPriority) "(" else ""
         fun close() = if (p <= infixOpPriority) ")" else ""
         return when (this) {
-            null -> ""
             is Expression.QuoteLiteral -> literal.print(firstOperand)
             is Expression.QuoteType -> "[" + quotedType.print() + "]"
             is Expression.IdentifierRef -> id.identifier
@@ -117,6 +116,7 @@ private class PrettyPrinter(val resugarizePrefixAndInfixSymbols: Boolean = true,
                 p = InfixOperator.Cast.priority
                 open() + expr.print(p, firstOperand) + " as " + destinationType.print() + close()
             }
+            is Expression.Assignment -> target.print(0) + " := " + value.print(0)
         }
     }
 
@@ -152,6 +152,7 @@ private class PrettyPrinter(val resugarizePrefixAndInfixSymbols: Boolean = true,
         this is Type.FnType -> "fn " + dom.print() + " -> " + codom.print()
         this is Type.NominalType -> name
         this is Type.TypeParam -> bound.def.typeParamsNames[bound.index]
+        this is Type.Mut -> "Mut " + elementType.print()
         else -> throw Exception("Unprintable type")
     }
 
@@ -162,7 +163,7 @@ private class PrettyPrinter(val resugarizePrefixAndInfixSymbols: Boolean = true,
     }
     fun Pattern.print_(firstOperand: Boolean = true): String {
         return when (this) {
-            is Pattern.BinderPattern -> id
+            is Pattern.BinderPattern -> (if (mutable) "mut " else "") + id
             is Pattern.LiteralPattern -> (if (literal.isUnit) "" else "\\") + literal.print(firstOperand)
             is Pattern.ListPattern -> "(" + elements.joinToString(", ") { it.print(firstOperand) } + ")"
             is Pattern.RecordPattern -> "(" + fields.map { (id, p) -> "$id = ${p.print()}" }.joinToString(", ") + ")"

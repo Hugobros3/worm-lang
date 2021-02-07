@@ -16,7 +16,7 @@ class Emitter(val modules: List<Module>, val outputDir: File) {
     val type_classes = mutableMapOf<Type, ClassFile>()
     val instance_classes = mutableMapOf<Def, ClassFile>()
 
-    fun emit() {
+    fun emit_all() {
         for (module in modules)
             mod_classes[module] = emit_module(module)
 
@@ -54,7 +54,7 @@ class Emitter(val modules: List<Module>, val outputDir: File) {
                     is Expression.Function -> {
                         var dump: Writer? = null
                         val fnEmitter = FunctionEmitter(this, builder, d)
-                        fnEmitter.emit(d)
+                        fnEmitter.emit_function(d)
                         val attributes = fnEmitter.finish(dump)
                         builder.method(f, descriptor, defaulMethodAccessFlags.copy(acc_final = true, acc_static = true), attributes)
                     }
@@ -65,7 +65,7 @@ class Emitter(val modules: List<Module>, val outputDir: File) {
                             val wrapper = fn_wrapper(d)
                             println(wrapper.prettyPrint())
                             val fnEmitter = FunctionEmitter(this, builder, wrapper)
-                            fnEmitter.emit(wrapper)
+                            fnEmitter.emit_function(wrapper)
                             val attributes = fnEmitter.finish(null)
                             builder.method(f, descriptor, defaulMethodAccessFlags.copy(acc_final = true, acc_static = true), attributes)
                         }
@@ -99,7 +99,7 @@ class Emitter(val modules: List<Module>, val outputDir: File) {
 
                     val descriptor = getMethodDescriptor(def.type as Type.FnType)
                     val fnEmitter = FunctionEmitter(this, builder, def.body.fn)
-                    fnEmitter.emit(def.body.fn)
+                    fnEmitter.emit_function(def.body.fn)
                     val attributes = fnEmitter.finish(dump)
                     builder.method(def.identifier, descriptor, defaulMethodAccessFlags.copy(acc_final = true, acc_static = true), attributes)
                     dump?.close()
@@ -139,4 +139,4 @@ class Emitter(val modules: List<Module>, val outputDir: File) {
     }
 }
 
-fun emit(module: Module, outputDir: File) = Emitter(listOf(module) + prelude_modules, outputDir).emit()
+fun emit(module: Module, outputDir: File) = Emitter(listOf(module) + prelude_modules, outputDir).emit_all()
