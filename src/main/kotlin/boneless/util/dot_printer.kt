@@ -14,7 +14,7 @@ open class DotPrinter(protected val output: Writer) {
 
     data class NodeAppearance(val shape: String = "ellipse", val color: String = "black", val style: String = "solid", val fillColor: String = "transparent")
 
-    data class ArrowStyle(val arrowHead: String = "normal", val fontSize: Int = 8, val color: String = "black", val fontColor: String = "grey")
+    data class ArrowStyle(val arrowHead: String = "normal", val fontSize: Int = 8, val style: String = "solid", val color: String = "black", val fontColor: String = "grey")
 
     protected fun node(internalName: String, label: String, appearance: NodeAppearance) {
         output += "$internalName [ "
@@ -37,6 +37,7 @@ open class DotPrinter(protected val output: Writer) {
             arrowParams += ",label=\"$name\""
         arrowParams += ",fontsize=${style.fontSize}"
         arrowParams += ",fontcolor=${style.fontColor}"
+        arrowParams += ",style=${style.style}"
         arrowParams += ",color=${style.color}"
         output += "$src -> $dst[$arrowParams];"
     }
