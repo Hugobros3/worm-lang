@@ -98,6 +98,21 @@ fun preprocessEdges(graph: Graph) {
     visitNode(graph.entryNode)
 }
 
+fun Node.immediateSuccessors(): List<Node> = when (this) {
+    is Node.Branch -> targets.map { it.target }
+    is Node.Jump -> listOf(target.target)
+}
+
+fun checkIncommingEdges(graph: Graph) {
+    fun checkEdge(e: Edge) {}
+    fun checkNode(node: Node) {
+        for (succ in node.immediateSuccessors()) {
+            assert(succ.incommingEdges.find { it.source == node } != null)
+        }
+    }
+    visitGraph(graph, ::checkNode, ::checkEdge)
+}
+
 fun createDomtree() {
     // http://www.cs.rice.edu/~keith/EMBED/dom.pdf
 }
@@ -129,7 +144,6 @@ class CFGGraphPrinter(output: Writer) : DotPrinter(output) {
     }
 
     fun finish() {
-
         indent--
         output += "}"
     }

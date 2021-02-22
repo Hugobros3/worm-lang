@@ -42,8 +42,9 @@ class TestStructurizer {
         val graph = make_random_cfg()
 
         preprocessEdges(graph)
+        checkIncommingEdges(graph)
 
-        val p = CFGGraphPrinter( w)
+        val p = CFGGraphPrinter(w)
 
         p.print(graph, "aquamarine")
 
