@@ -14,7 +14,9 @@ class TestStructurizer {
             var seed = seeder.nextLong()
             println("seed: $seed")
 
-            seed = 5666716588046080733
+            seed = -3218575443370169431
+            // seed = -9169918898909610541
+            // seed = 5059993167240053725
 
             val rnd = Random(seed)
             fun <E> List<E>.seededRandom(): E {
@@ -24,31 +26,24 @@ class TestStructurizer {
             }
 
             val nodesCount = 16; // 4 + rnd.nextInt(8)
-            val nodes = (0..nodesCount).map {
-                if (it == 0)
-                    return@map Node.Exit(name())
+            val nodes = (0..nodesCount).map { Node(name()) }
+
+            for ((i, node) in nodes.withIndex()) {
+                if (i == 0) {
+                    node.body = Node.Body.Exit()
+                }
 
                 val branchWeight = 0.35
                 if (rnd.nextFloat() < branchWeight) {
-                    Node.Branch(name())
+                    val branches = mutableListOf(Edge(node, nodes.seededRandom()), Edge(node, nodes.seededRandom()))
+                    node.body = Node.Body.Branch(branches)
                 } else {
-                    Node.Jump(name())
-                }
-            }
-
-            for (node in nodes) {
-                when (node) {
-                    is Node.Branch -> {
-                        node.targets = mutableListOf(Edge(node, nodes.seededRandom()), Edge(node, nodes.seededRandom()))
-                    }
-                    is Node.Jump -> {
-                        node.target = Edge(node, nodes.seededRandom())
-                    }
+                    node.body = Node.Body.Jump(Edge(node, nodes.seededRandom()))
                 }
             }
 
             val graph = Graph(nodes.seededRandom())
-            if (isReachable(graph, nodes[0], graph.entryNode))
+            if (isReachable(graph, nodes[0], graph.entryNode, AllowBackEdges.Yes))
                 return graph
             else
                 continue
@@ -60,18 +55,28 @@ class TestStructurizer {
         val dotFile = File("test_out/structurizer/graph.dot")
         dotFile.parentFile.mkdirs()
         val w = dotFile.writer()
-        val graph = make_random_cfg()
+        var graph = make_random_cfg()
+
+        val colours = listOf("springgreen", "springgreen1", "springgreen2", "springgreen3", "springgreen4", "steelblue", "steelblue1", "steelblue2", "steelblue3", "steelblue4", "   tan   ", "   tan1   ", "   tan2   ", "   tan3   ", "   tan4  ", "thistle", "thistle1", "thistle2", "thistle3", "thistle4", "tomato", "tomato1", "tomato2", "tomato3", "tomato4", "transparent", "turquoise", "turquoise1", "turquoise2", "turquoise3", "turquoise4", "violet", "violetred", "violetred1", "violetred2", "violetred3", "violetred4", "wheat", "wheat1", "wheat2", "wheat3", "wheat4", "white", "whitesmoke", "yellow", "yellow1", "yellow2", "yellow3", "yellow4", "yellowgreen")
+        var colour = 0
 
         preprocessEdges(graph)
         checkIncommingEdges(graph)
 
         val p = CFGGraphPrinter(w)
 
-        p.print(graph, "aquamarine")
+        p.print(graph, colours[(colour++) % colours.size])
 
-        catchLoopExits(graph)
+        for (i in 0 until 3) {
+            catchLoopExits(graph)
+            p.print(graph, colours[(colour++) % colours.size], "relooped_${i}_")
 
-        p.print(graph, "coral1", "relooped_")
+            graph = recreate(graph)
+            preprocessEdges(graph)
+            checkIncommingEdges(graph)
+            p.print(graph, colours[(colour++) % colours.size], "recreated_${i}_")
+            removeUpdatedMarkers(graph)
+        }
 
         p.finish()
 

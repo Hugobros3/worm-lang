@@ -1,24 +1,24 @@
 package boneless.experimental
 
+import boneless.experimental.Node.Body
 import boneless.util.DotPrinter
 import java.io.Writer
 
 data class Graph(val entryNode: Node)
 
-sealed class Node(val name: String) {
+class Node(val name: String) {
     val exits = mutableListOf<Edge>()
+    val rewriteEdges = mutableMapOf<Int, Edge>()
+    var isLoopHeader = false
 
     val incommingEdges = mutableListOf<Edge>()
 
-    class Exit(name: String) : Node(name) {
+    lateinit var body: Body
 
-    }
-    class Jump(name: String) : Node(name) {
-        lateinit var target: Edge
-    }
-    class Branch(name: String) : Node(name) {
-        lateinit var targets: MutableList<Edge>
-        val rgb = ""
+    sealed class Body {
+        class Exit() : Body() {}
+        class Jump(val target: Edge) : Body() {}
+        class Branch(val targets: List<Edge>) : Body() {}
     }
 
     override fun toString(): String {
@@ -27,12 +27,14 @@ sealed class Node(val name: String) {
 }
 
 class Edge(val source: Node, val dest: Node) {
-    var signature: List<Node.Branch>? = null
+    var signature: List<Node>? = null
     var edgeType = EdgeType.UNDEF
     var isSynthetic: Boolean = false
+    var isRewritten: Boolean = false
 
     /** "exit" edges are not actually taken, they are just there to represent the non-local jump that once existed */
     var isExit: Boolean = false
+    var needsRewrite: Boolean = false
     lateinit var loopHead: Node
 
     override fun toString(): String {
@@ -46,7 +48,13 @@ enum class EdgeType {
     UNDEF,
 }
 
-fun visitGraph(graph: Graph, nodeVisitor: (Node) -> Unit, edgeVisitor: (Edge) -> Unit, entry: Node = graph.entryNode, visitExits: Boolean = false) {
+sealed class AllowBackEdges {
+    object Yes : AllowBackEdges()
+    object No : AllowBackEdges()
+    data class OnlyFor(val node: Node) : AllowBackEdges()
+}
+
+fun visitGraph(graph: Graph, nodeVisitor: (Node) -> Unit, edgeVisitor: (Edge) -> Unit, entry: Node = graph.entryNode, visitExits: Boolean = false, allowBackEdges: AllowBackEdges = AllowBackEdges.Yes) {
     val stack = mutableListOf<Node>()
     val done = mutableSetOf<Node>()
 
@@ -57,17 +65,23 @@ fun visitGraph(graph: Graph, nodeVisitor: (Node) -> Unit, edgeVisitor: (Edge) ->
         nodeVisitor(element)
 
         fun visit(edge: Edge) {
+            if (edge.edgeType == EdgeType.BACK) {
+                when (allowBackEdges) {
+                    AllowBackEdges.Yes -> { }
+                    AllowBackEdges.No -> return
+                    is AllowBackEdges.OnlyFor -> {
+                        if (allowBackEdges.node != edge.dest)
+                            return
+                    }
+                }
+            }
             edgeVisitor(edge)
-            if (!done.contains(edge.dest) && !stack.contains(edge.dest) && edge.dest != element){
+            if (!done.contains(edge.dest) && !stack.contains(edge.dest) && edge.dest != element) {
                 stack.add(edge.dest)
             }
         }
 
-        when (element) {
-            is Node.Jump -> visit(element.target)
-            is Node.Branch -> element.targets.forEach(::visit)
-            is Node.Exit -> {}
-        }
+        element.immediateSuccessors().forEach(::visit)
 
         if (visitExits) {
             element.exits.forEach(::visit)
@@ -103,15 +117,12 @@ fun preprocessEdges(graph: Graph) {
                     edge.edgeType = EdgeType.FORWARD
                 } else {
                     edge.edgeType = EdgeType.BACK
+                    edge.dest.isLoopHeader = true
                 }
             }
         }
 
-        when (element) {
-            is Node.Jump -> visit(element.target)
-            is Node.Branch -> element.targets.forEach(::visit)
-            is Node.Exit -> {}
-        }
+        element.immediateSuccessors().forEach(::visit)
 
         done.add(element)
         trace.removeLast()
@@ -119,30 +130,33 @@ fun preprocessEdges(graph: Graph) {
     visitNode(graph.entryNode)
 }
 
-fun Node.immediateSuccessors(): List<Node> = when (this) {
-    is Node.Branch -> targets.map { it.dest }
-    is Node.Jump -> listOf(target.dest)
-    is Node.Exit -> emptyList()
+fun Node.immediateSuccessors(): List<Edge> = when (val body = body) {
+    is Node.Body.Branch -> body.targets
+    is Node.Body.Jump -> listOf(body.target)
+    is Node.Body.Exit -> emptyList()
 }
 
 fun checkIncommingEdges(graph: Graph) {
     fun checkEdge(e: Edge) {}
     fun checkNode(node: Node) {
         for (succ in node.immediateSuccessors()) {
-            assert(succ.incommingEdges.find { it.source == node } != null)
+            assert(succ.dest.incommingEdges.find { it.source == node } != null)
         }
     }
     visitGraph(graph, ::checkNode, ::checkEdge)
 }
 
-fun isReachable(graph: Graph, target: Node, from: Node): Boolean {
+fun isReachable(graph: Graph, target: Node, from: Node, allowBackEdges: AllowBackEdges): Boolean {
+    if (target == from)
+        return true
+
     var reachable = false
     fun checkEdge(e: Edge) {}
     fun checkNode(node: Node) {
         if (node == target)
             reachable = true
     }
-    visitGraph(graph, ::checkNode, ::checkEdge, from)
+    visitGraph(graph, ::checkNode, ::checkEdge, from, allowBackEdges = allowBackEdges)
     return reachable
 }
 
@@ -152,6 +166,7 @@ fun collectBackEdges(graph: Graph): List<Edge> {
         if (e.edgeType == EdgeType.BACK)
             backedges += e
     }
+
     fun checkNode(node: Node) {}
     visitGraph(graph, ::checkNode, ::checkEdge)
     return backedges
@@ -163,6 +178,9 @@ fun collectBackEdges(graph: Graph): List<Edge> {
 fun catchLoopExits(graph: Graph) {
     val backedges = collectBackEdges(graph)
     println("$backedges")
+
+    val loops = mutableMapOf<Node, MutableSet<Node>>()
+
     for (backedge in backedges) {
         val loopHead = backedge.dest
         // Recursively visit the predecessors of the back edge origin up until we find a node
@@ -170,13 +188,30 @@ fun catchLoopExits(graph: Graph) {
         val todo = mutableListOf<Node>(backedge.source)
         val once = mutableSetOf<Node>()
 
-        val handled = mutableSetOf<Node>()
+        val handled = loops.getOrPut(loopHead) {
+            mutableSetOf<Node>()
+        }
 
         while (todo.isNotEmpty()) {
             val node = todo.removeLast()
-            assert(isReachable(graph, node, loopHead))
+            assert(isReachable(graph, node, loopHead, allowBackEdges = AllowBackEdges.No)) {
+                println("woo")
+                isReachable(graph, node, loopHead, allowBackEdges = AllowBackEdges.No)
+            }
+
+            // External edges are allowed out of the loop head
+            if (node == loopHead) {
+                continue
+            }
+
             for (pred in node.incommingEdges) {
-                if (isReachable(graph, pred.source, loopHead)) {
+                if (pred.edgeType != EdgeType.BACK && isReachable(
+                        graph,
+                        pred.source,
+                        loopHead,
+                        allowBackEdges = AllowBackEdges.No
+                    )
+                ) {
                     if (!once.contains(pred.source)) {
                         todo.add(pred.source)
                         once.add(pred.source)
@@ -185,21 +220,30 @@ fun catchLoopExits(graph: Graph) {
             }
 
             // Find any branches that cannot reach the loop head anymore and force them to go there
-            if (node is Node.Branch) {
+            val body = node.body
+            if (body is Node.Body.Branch) {
+                var body: Node.Body.Branch = body
                 if (handled.contains(node)) continue
-                for (i in 0 until node.targets.size) {
-                    val originalEdge = node.targets[i]
-                    if (!isReachable(graph, loopHead, originalEdge.dest)) {
-                        /*val toHead = Edge(originalEdge.source, loopHead)
+                for (i in 0 until body.targets.size) {
+                    val originalEdge = body.targets[i]
+                    if (!isReachable(graph, loopHead, originalEdge.dest, allowBackEdges = AllowBackEdges.OnlyFor(loopHead)
+                        )/* || (originalEdge.edgeType == EdgeType.BACK && originalEdge.dest != loopHead)*/) {
+                        val toHead = Edge(originalEdge.source, loopHead)
                         toHead.isSynthetic = true
-                        node.targets[i] = toHead
+
+                        /*val newTargets = MutableList(body.targets.size) {body.targets[it]}
+                        newTargets[i] = toHead
+                        body = Node.Body.Branch(newTargets)
+                        node.body = body*/
+                        node.rewriteEdges[i] = toHead
+                        originalEdge.needsRewrite = true
 
                         val exitEdge = Edge(originalEdge.source, originalEdge.dest)
                         exitEdge.isSynthetic = true
                         exitEdge.isExit = true
                         exitEdge.loopHead = loopHead
 
-                        loopHead.exits.add(exitEdge)*/
+                        loopHead.exits.add(exitEdge)
                         println("${node.name} is a problem area for ${loopHead.name}")
                     }
                 }
@@ -207,6 +251,76 @@ fun catchLoopExits(graph: Graph) {
             }
         }
     }
+}
+
+fun recreate(graph: Graph): Graph {
+    val newNodes = mutableMapOf<Node, Node>()
+
+    fun recreateNode(node: Node): Node {
+        val newNode: Node = Node(node.name)
+        newNodes[node] = newNode
+
+        val targets = mutableListOf<Edge>()
+        for ((i, edge) in node.immediateSuccessors().withIndex()) {
+            var edge = node.rewriteEdges[i] ?: edge
+
+            val newSource = newNodes.getOrPut(edge.source) {
+                recreateNode(edge.source)
+            }
+            val newDest = newNodes.getOrPut(edge.dest) {
+                recreateNode(edge.dest)
+            }
+
+            val newEdge = Edge(newSource, newDest)
+            // newEdge.isSynthetic = edge.isSynthetic
+            if (node.rewriteEdges[i] != null)
+                newEdge.isRewritten = true
+            if (targets.find { it.source == newEdge.source && it.dest == newEdge.dest } == null)
+                targets.add(newEdge)
+        }
+
+        for (exit in node.exits) {
+            val newSource = newNodes.getOrPut(exit.loopHead) {
+                recreateNode(exit.loopHead)
+            }
+            val newDest = newNodes.getOrPut(exit.dest) {
+                recreateNode(exit.dest)
+            }
+
+            val newEdge = Edge(newSource, newDest)
+            newEdge.isSynthetic = true
+            if (targets.find { it.source == newEdge.source && it.dest == newEdge.dest } == null)
+                targets.add(newEdge)
+        }
+
+        when {
+            targets.isEmpty() -> {
+                newNode.body = Body.Exit()
+            }
+            targets.size == 1 -> {
+                newNode.body = Body.Jump(targets[0])
+            }
+            else -> {
+                newNode.body = Body.Branch(targets)
+            }
+        }
+
+        return newNode
+    }
+
+    val newRoot = newNodes.getOrPut(graph.entryNode) {
+        recreateNode(graph.entryNode)
+    }
+    return Graph(newRoot)
+}
+
+fun removeUpdatedMarkers(graph: Graph) {
+    fun checkEdge(e: Edge) {
+        e.isSynthetic = false
+        e.isRewritten = false
+    }
+    fun checkNode(node: Node) {}
+    visitGraph(graph, ::checkNode, ::checkEdge)
 }
 
 fun createDomtree() {
@@ -224,27 +338,40 @@ class CFGGraphPrinter(output: Writer) : DotPrinter(output) {
     fun print(graph: Graph, nodeColor: String, prefix: String = "") {
         val nodeAppearance = NodeAppearance(fillColor = nodeColor, style = "filled")
         val ControlFlow = DotPrinter.ArrowStyle(arrowHead = "normal")
-        val Synthetic = DotPrinter.ArrowStyle(arrowHead = "normal", color = "blue")
-        val ExitFlowReal = DotPrinter.ArrowStyle(arrowHead = "normal", color = "red")
+        val Synthetic = DotPrinter.ArrowStyle(arrowHead = "normal", color = "blue", style = "dashed")
+        val Rewrote = DotPrinter.ArrowStyle(arrowHead = "normal", color = "blue", style = "solid")
+        val ExitFlowReal = DotPrinter.ArrowStyle(arrowHead = "normal", color = "red", style = "dashed")
         val ExitFlowOg = DotPrinter.ArrowStyle(arrowHead = "normal", color = "red", style = "dotted")
 
         fun nodeVisitor(node: Node) {
-            val shape = if (node == graph.entryNode) nodeAppearance.copy(shape = "rectangle") else nodeAppearance
-            this.node(prefix + node.name, if (node is Node.Branch) "X ${node.name}" else node.name, shape)
+            var shape = if (node == graph.entryNode) nodeAppearance.copy(shape = "rectangle") else nodeAppearance
+            if (node.isLoopHeader)
+                shape = shape.copy(shape = "diamond")
+            this.node(prefix + node.name, if (node.body is Node.Body.Branch) "X ${node.name}" else node.name, shape)
         }
+
         fun edgeVisitor(edge: Edge) {
             if (edge.isExit) {
-                this.arrow(prefix + edge.source.name, prefix + edge.dest.name, ExitFlowOg, "")
+                //this.arrow(prefix + edge.source.name, prefix + edge.dest.name, ExitFlowOg, "")
                 this.arrow(prefix + edge.loopHead.name, prefix + edge.dest.name, ExitFlowReal, "")
                 return
             }
 
-            val label = when(edge.edgeType) {
+            val label = when (edge.edgeType) {
                 EdgeType.FORWARD -> ""
                 EdgeType.BACK -> "back"
                 EdgeType.UNDEF -> "undef"
             }
-            this.arrow(prefix + edge.source.name, prefix + edge.dest.name, if (edge.isSynthetic) Synthetic else ControlFlow, label)
+
+            var appearance = ControlFlow
+            if (edge.isSynthetic)
+                appearance = Synthetic
+            if (edge.isRewritten)
+                appearance = Rewrote
+            if (edge.needsRewrite)
+                appearance = ExitFlowOg
+
+            this.arrow(prefix + edge.source.name, prefix + edge.dest.name, appearance, label)
         }
         visitGraph(graph, ::nodeVisitor, ::edgeVisitor, visitExits = true)
     }
