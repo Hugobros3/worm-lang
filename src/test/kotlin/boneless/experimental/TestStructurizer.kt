@@ -14,9 +14,13 @@ class TestStructurizer {
             var seed = seeder.nextLong()
             println("seed: $seed")
 
-            seed = -3218575443370169431
+            // seed = -3218575443370169431
             // seed = -9169918898909610541
             // seed = 5059993167240053725
+            // seed = -3428758823127463859
+             seed = -3906915954911236504
+            // seed = -8851239485985846864
+            //seed = 7768002510966139666
 
             val rnd = Random(seed)
             fun <E> List<E>.seededRandom(): E {
@@ -25,7 +29,7 @@ class TestStructurizer {
                 return this[i]
             }
 
-            val nodesCount = 16; // 4 + rnd.nextInt(8)
+            val nodesCount = 32; // 4 + rnd.nextInt(8)
             val nodes = (0..nodesCount).map { Node(name()) }
 
             for ((i, node) in nodes.withIndex()) {
@@ -57,7 +61,58 @@ class TestStructurizer {
         val w = dotFile.writer()
         var graph = make_random_cfg()
 
-        val colours = listOf("springgreen", "springgreen1", "springgreen2", "springgreen3", "springgreen4", "steelblue", "steelblue1", "steelblue2", "steelblue3", "steelblue4", "   tan   ", "   tan1   ", "   tan2   ", "   tan3   ", "   tan4  ", "thistle", "thistle1", "thistle2", "thistle3", "thistle4", "tomato", "tomato1", "tomato2", "tomato3", "tomato4", "transparent", "turquoise", "turquoise1", "turquoise2", "turquoise3", "turquoise4", "violet", "violetred", "violetred1", "violetred2", "violetred3", "violetred4", "wheat", "wheat1", "wheat2", "wheat3", "wheat4", "white", "whitesmoke", "yellow", "yellow1", "yellow2", "yellow3", "yellow4", "yellowgreen")
+        val colours = listOf(
+            "springgreen",
+            "springgreen1",
+            "springgreen2",
+            "springgreen3",
+            "springgreen4",
+            "steelblue",
+            "steelblue1",
+            "steelblue2",
+            "steelblue3",
+            "steelblue4",
+            "   tan   ",
+            "   tan1   ",
+            "   tan2   ",
+            "   tan3   ",
+            "   tan4  ",
+            "thistle",
+            "thistle1",
+            "thistle2",
+            "thistle3",
+            "thistle4",
+            "tomato",
+            "tomato1",
+            "tomato2",
+            "tomato3",
+            "tomato4",
+            "transparent",
+            "turquoise",
+            "turquoise1",
+            "turquoise2",
+            "turquoise3",
+            "turquoise4",
+            "violet",
+            "violetred",
+            "violetred1",
+            "violetred2",
+            "violetred3",
+            "violetred4",
+            "wheat",
+            "wheat1",
+            "wheat2",
+            "wheat3",
+            "wheat4",
+            "white",
+            "whitesmoke",
+            "yellow",
+            "yellow1",
+            "yellow2",
+            "yellow3",
+            "yellow4",
+            "yellowgreen"
+        )
         var colour = 0
 
         preprocessEdges(graph)
@@ -65,9 +120,9 @@ class TestStructurizer {
 
         val p = CFGGraphPrinter(w)
 
-        p.print(graph, colours[(colour++) % colours.size])
+        // p.print(graph, colours[(colour++) % colours.size])
 
-        for (i in 0 until 3) {
+        /*for (i in 0 until 3) {
             catchLoopExits(graph)
             p.print(graph, colours[(colour++) % colours.size], "relooped_${i}_")
 
@@ -76,7 +131,14 @@ class TestStructurizer {
             checkIncommingEdges(graph)
             p.print(graph, colours[(colour++) % colours.size], "recreated_${i}_")
             removeUpdatedMarkers(graph)
+        }*/
+
+        val forest = get_loop_forest(graph)
+        forest.forEach {
+            println("scc: $it")
         }
+        p.print(graph, colours[(colour++) % colours.size])
+        p.print(graph, colours[(colour++) % colours.size], prefix = "forest_", forest = forest)
 
         p.finish()
 

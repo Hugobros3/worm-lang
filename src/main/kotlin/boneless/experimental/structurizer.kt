@@ -7,14 +7,23 @@ import java.io.Writer
 data class Graph(val entryNode: Node)
 
 class Node(val name: String) {
+
+    // homebrew algo garbo
     val exits = mutableListOf<Edge>()
     val rewriteEdges = mutableMapOf<Int, Edge>()
-    var isLoopHeader = false
+
 
     val incommingEdges = mutableListOf<Edge>()
 
-    lateinit var body: Body
+    // SCC crap
+    var index = -1
+    var lowlink = -1
+    var onStack = false
 
+    var isLoopHeader = false
+    var loop: Loop? = null
+
+    lateinit var body: Body
     sealed class Body {
         class Exit() : Body() {}
         class Jump(val target: Edge) : Body() {}
@@ -27,7 +36,6 @@ class Node(val name: String) {
 }
 
 class Edge(val source: Node, val dest: Node) {
-    var signature: List<Node>? = null
     var edgeType = EdgeType.UNDEF
     var isSynthetic: Boolean = false
     var isRewritten: Boolean = false
@@ -36,6 +44,8 @@ class Edge(val source: Node, val dest: Node) {
     var isExit: Boolean = false
     var needsRewrite: Boolean = false
     lateinit var loopHead: Node
+
+    var loopbackEdge: Boolean = false
 
     override fun toString(): String {
         return "Edge(source=$source, dest=$dest)"
@@ -107,17 +117,17 @@ fun preprocessEdges(graph: Graph) {
             edge.dest.incommingEdges.add(edge)
             if (done.contains(edge.dest)) {
                 if (trace.contains(edge.dest)) {
-                    edge.edgeType = EdgeType.BACK
+                    //edge.edgeType = EdgeType.BACK
                 } else {
-                    edge.edgeType = EdgeType.FORWARD
+                    //edge.edgeType = EdgeType.FORWARD
                 }
             } else {
                 if (!trace.contains(edge.dest)) {
                     visitNode(edge.dest)
-                    edge.edgeType = EdgeType.FORWARD
+                    //edge.edgeType = EdgeType.FORWARD
                 } else {
-                    edge.edgeType = EdgeType.BACK
-                    edge.dest.isLoopHeader = true
+                    //edge.edgeType = EdgeType.BACK
+                    //edge.dest.isLoopHeader = true
                 }
             }
         }
@@ -335,20 +345,25 @@ class CFGGraphPrinter(output: Writer) : DotPrinter(output) {
         output += "bgcolor=transparent;"
     }
 
-    fun print(graph: Graph, nodeColor: String, prefix: String = "") {
+    fun print(graph: Graph, nodeColor: String, prefix: String = "", forest: List<Loop>? = null) {
         val nodeAppearance = NodeAppearance(fillColor = nodeColor, style = "filled")
         val ControlFlow = DotPrinter.ArrowStyle(arrowHead = "normal")
         val Synthetic = DotPrinter.ArrowStyle(arrowHead = "normal", color = "blue", style = "dashed")
         val Rewrote = DotPrinter.ArrowStyle(arrowHead = "normal", color = "blue", style = "solid")
         val ExitFlowReal = DotPrinter.ArrowStyle(arrowHead = "normal", color = "red", style = "dashed")
         val ExitFlowOg = DotPrinter.ArrowStyle(arrowHead = "normal", color = "red", style = "dotted")
+        val LoopbackEdge = DotPrinter.ArrowStyle(arrowHead = "normal", color = "red", style = "solid")
 
         fun nodeVisitor(node: Node) {
             var shape = if (node == graph.entryNode) nodeAppearance.copy(shape = "rectangle") else nodeAppearance
             if (node.isLoopHeader)
                 shape = shape.copy(shape = "diamond")
+            if (node.loop != null) {
+                shape = shape.copy(fillColor = node.loop!!.colour)
+            }
             this.node(prefix + node.name, if (node.body is Node.Body.Branch) "X ${node.name}" else node.name, shape)
         }
+        fun nodeVisitorNOP(node: Node) {}
 
         fun edgeVisitor(edge: Edge) {
             if (edge.isExit) {
@@ -370,10 +385,35 @@ class CFGGraphPrinter(output: Writer) : DotPrinter(output) {
                 appearance = Rewrote
             if (edge.needsRewrite)
                 appearance = ExitFlowOg
+            if (edge.loopbackEdge)
+                appearance = LoopbackEdge
 
             this.arrow(prefix + edge.source.name, prefix + edge.dest.name, appearance, label)
         }
-        visitGraph(graph, ::nodeVisitor, ::edgeVisitor, visitExits = true)
+
+        if (forest != null) {
+            val notInLoops = getNodes(graph).toMutableSet()
+            fun printLoop(loop: Loop) {
+                output += "subgraph cluster_${loop.id} {"
+                indent++
+                val uniqueNodes = loop.body.toMutableSet()
+                for (subloop in loop.subloops) {
+                    uniqueNodes.removeAll(subloop.body)
+                    notInLoops.removeAll(subloop.body)
+                    printLoop(subloop)
+                }
+                for (node in uniqueNodes)
+                    nodeVisitor(node)
+                indent--
+                output += "}"
+            }
+            for (loop in forest)
+                printLoop(loop)
+            for (node in notInLoops)
+                nodeVisitor(node)
+        }
+
+        visitGraph(graph, if (forest != null) ::nodeVisitorNOP else ::nodeVisitor, ::edgeVisitor, visitExits = true)
     }
 
     fun finish() {
